@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>hello world</title>
+    <title>type</title>
     <style>
       :root {
         color-scheme: dark;
@@ -25,6 +25,7 @@
         background: var(--bg);
         color: var(--text);
         font-family: Helvetica, Arial, sans-serif;
+        overflow: hidden;
       }
 
       main {
@@ -32,18 +33,81 @@
         padding: 1rem;
       }
 
-      h1 {
+      .screen {
+        position: relative;
+        min-height: calc(100vh - 2rem);
+      }
+
+      .output {
         margin: 0;
         font-size: clamp(0.875rem, 2vw, 1.125rem);
         font-weight: 400;
         letter-spacing: 0.04em;
-        text-transform: lowercase;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .caret {
+        display: inline-block;
+        margin-left: 0.02em;
+        animation: blink 1s steps(1, end) infinite;
+      }
+
+      .capture {
+        position: absolute;
+        inset: 0;
+        margin: 0;
+        border: 0;
+        padding: 0;
+        resize: none;
+        background: transparent;
+        color: transparent;
+        font-family: inherit;
+        outline: none;
+        caret-color: transparent;
+        overflow: hidden;
+      }
+
+      @keyframes blink {
+        0%,
+        49% {
+          opacity: 1;
+        }
+
+        50%,
+        100% {
+          opacity: 0;
+        }
       }
     </style>
   </head>
   <body>
     <main>
-      <h1>hello world</h1>
+      <div class="screen">
+        <p class="output" id="output"><span class="caret">|</span></p>
+        <textarea class="capture" id="capture" autofocus spellcheck="false"></textarea>
+      </div>
     </main>
+    <script>
+      const capture = document.getElementById("capture");
+      const output = document.getElementById("output");
+
+      function escapeHtml(value) {
+        return value
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;");
+      }
+
+      function render() {
+        const text = escapeHtml(capture.value);
+        output.innerHTML = `${text}<span class="caret">|</span>`;
+      }
+
+      render();
+      capture.addEventListener("input", render);
+      window.addEventListener("click", () => capture.focus());
+      window.addEventListener("load", () => capture.focus());
+    </script>
   </body>
 </html>
