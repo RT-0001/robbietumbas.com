@@ -1,0 +1,65 @@
+# Defaults measured off the approved Trailmate 25 QT image (1154px, scaled to ratios).
+name: igloo_default
+fonts_dir: fonts
+canvas: { w: 2000, h: 2000, bg: "#E1E3E2" }
+
+tokens:
+  fonts:
+    title:             { family: Montserrat, weight: 700, size_ratio: 0.042, tracking: 0 }
+    label:             { family: Montserrat, weight: 500, size_ratio: 0.030 }
+    callout_num:       { family: Oswald,     weight: 600, size_ratio: 0.080 }
+    callout_text:      { family: Montserrat, weight: 400, size_ratio: 0.021 }
+    callout_text_bold: { family: Montserrat, weight: 700, size_ratio: 0.021 }
+  colors: { line: "#1A1A1A", text: "#111111", callout_text: "#2B2B2B", can_fill: "#B9BCBF" }
+  stroke_ratio: 0.0016            # line weight / canvas width
+  label_gap_capheights: 0.6
+  number_format: "{value:g}”"
+
+layout:
+  title_band: { top: 0.03, height: 0.10 }
+  safe_area: { left: 0.06, right: 0.06, top: 0.15, bottom: 0.12 }
+  reserved_zones:
+    bottom_left:   { x: 0.03, y: 0.82, w: 0.16, h: 0.16 }   # can count
+    bottom_center: { x: 0.28, y: 0.88, w: 0.50, h: 0.08 }   # interior dims
+  callouts:
+    cans: bottom_left
+    interior: bottom_center
+  optical_center_target: [0.52, 0.52]
+  legibility_min_cap_px: 36
+
+annotations:
+  clearance_ratio: 0.012
+  ticks: none                     # none | ticks | arrows
+  extension_lines: auto           # on | off | auto (searched)
+  height_mode: screen_vertical    # screen_vertical | edge
+
+fit:
+  white_threshold: 245
+  max_uncovered: 0.01
+
+search:
+  samples: 300
+  refine_top: 10
+  top_n: 3
+  ranges:
+    offset_ratio: [0.035, 0.10]      # on-screen offset / projected box diagonal
+    label_t: [0.35, 0.65]
+    height_side: [left, right]
+    group_scale: [0.85, 0.98]
+    group_nudge: [-0.02, 0.02]
+    extension_lines: [false, true]
+
+targets:                        # measured on the approved Trailmate 25 image
+  offset_ratio: 0.06
+  fill: 0.85
+
+weights:
+  offset_equality: 3.0
+  offset_target: 1.0
+  label_centering: 0.5
+  whitespace_balance: 2.0
+  optical_center: 1.5
+  fill: 1.0
+  height_side_clutter: 1.5
+  extension_lines: 0.3
+  style_deviation: 0.0            # enable after style learning

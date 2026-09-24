@@ -1,0 +1,25 @@
+# Hard-side cooler, 3/4 view, short (W) side visible on image-left.
+# Yaw convention: 0 = camera square to the front (L) face; negative = camera
+# orbits toward the left end, so the left side face becomes visible.
+# pitch_deg > 0 = camera above the product (elevation). See camera.verticals.
+name: hardside_34_left
+camera:
+  focal_px_at_2000: 5000        # UNCALIBRATED guess. With line evidence the fit frees focal (fixture lands ~8.4k).
+  calibrated: false
+  principal_point: center
+  verticals: plumb              # verified on 00034966: silhouette sides + front-left seam are plumb to 1px
+nominal_pose:
+  yaw_deg: -35
+  pitch_deg: 18
+  roll_deg: 0
+fit_bounds:                     # search window around nominal
+  yaw_deg: [-12, 12]
+  pitch_deg: [-8, 8]
+  roll_deg: [-3, 3]
+axis_map:
+  front_face: L
+  side_face: W
+visible_bottom_edges: [front, left_side]
+height_edge_candidates: [left_silhouette, right_silhouette]
+expected_excess: [0.02, 0.30]
+style_overrides: {}

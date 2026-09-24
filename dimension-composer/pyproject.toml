@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dimcomp"
+version = "0.1.0"
+description = "Compose Amazon-style dimension infographics from real product photos."
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "opencv-python-headless>=4.8",
+  "shapely>=2.0",
+  "pydantic>=2.5",
+  "PyYAML>=6.0",
+  "Pillow>=10.0",
+  "fonttools>=4.40",
+  "typer>=0.9",
+  "resvg-py>=0.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+dimcomp = "dimcomp.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["dimcomp*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

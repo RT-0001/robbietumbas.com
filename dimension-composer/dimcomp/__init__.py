@@ -1,0 +1,1 @@
+"""Dimension image composer."""

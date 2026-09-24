@@ -1,0 +1,8 @@
+{
+  "_comment": "Pixels in the source photo (photos/00034966.png). W: left-face gasket band top edge (subpixel fit, 0.7px max residual over 168px). H: front-left body seam (plumb to 1px over 240px).",
+  "lines": {
+    "W": [[[84.0, 177.5], [252.0, 222.5]]],
+    "H": [[[267.0, 381.0], [266.5, 621.0]]]
+  },
+  "corners": {}
+}
