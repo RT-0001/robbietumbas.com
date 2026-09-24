@@ -1,4 +1,5 @@
-"""Product silhouette from a cutout (alpha) or a seamless-white shot. No ML."""
+"""Product silhouette from the photo's alpha (studio shots arrive pre-keyed).
+White-threshold fallback exists only for fit.require_alpha: false. No ML."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -37,10 +38,6 @@ class Silhouette:
         # ragged side = mask fills the band unevenly (protrusions)
         ragged = float(1.0 - m.mean())
         return density + 0.5 * ragged
-
-
-def load_rgba(path) -> Image.Image:
-    return Image.open(path).convert("RGBA")
 
 
 def extract(img: Image.Image, fit_cfg) -> Silhouette:

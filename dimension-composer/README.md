@@ -12,6 +12,11 @@ dimcomp batch  specs/
 pytest -q
 ```
 
+## House assumptions
+
+- **Photos:** every studio photo arrives masked and pre-keyed as a TIFF with a transparent background, at `photos/<sku>.tif`. The loader (`geometry/photo.py`, via tifffile) handles 8/16-bit, straight and premultiplied alpha, a saved mask channel, CMYK, and embedded ICC profiles (converted to sRGB for preview). A TIFF with no alpha, or an all-opaque one, is an error that points at Photoshop's "Save Transparency" option. Silhouettes come from alpha; the white-threshold path only runs with `fit.require_alpha: false`. The scene keeps the original TIFF as `src` for the PSD export, and the SVG/PNG previews embed a copy resampled to its placed size.
+- **Type:** all Gibson, SemiBold and Regular. Measured on the approved image: title, dimension labels, "HOLDS UP TO", "CANS" and the interior values are SemiBold (stem/cap 0.20–0.25); "INTERIOR DIMENSIONS…" is Regular (0.12); "38" is SemiBold at about 65% horizontal scale (`h_scale`). Sizes are set by cap height (`cap_ratio`), so any face lands at the approved visual size. Gibson is commercial and not in the repo: put the licensed files in `fonts/` or list their folder in `font_search_dirs`. Until then Montserrat stands in. `report.json` → `font_substitutions` and a CLI warning flag it, and scene text layers still carry `postscript: Gibson-SemiBold` / `Gibson-Regular` for the PSD.
+
 On the fixture, search takes about 4.5s for about 980 layout evaluations. Rendering takes about 4s. A fresh fit takes about 10s, and the result is cached in `fits/`.
 
 ## Pipeline
@@ -32,7 +37,7 @@ On the fixture, search takes about 4.5s for about 980 layout evaluations. Render
 
 ## Where this deviates from the plan, and why
 
-Everything below was measured on the approved Trailmate 25 image (`tests/fixtures/reference_00034966.jpg`). The fixture photo `photos/00034966.png` is the product cut out of that image.
+Everything below was measured on the approved Trailmate 25 image (`tests/fixtures/reference_00034966.jpg`). The fixture photo `photos/00034966.tif` is the product cut out of that image, saved as a 16-bit straight-alpha TIFF with an sRGB profile.
 
 1. **Verticals are plumb, so the camera model needed a `plumb` mode.** On the approved image, the silhouette's left edge sits at x=230 across 160px of height, and the front-left seam at x=423 drifts only 1px over 240px. A pinhole camera pitched down 18° would lean them about 19px. The shot was made with a shift lens, is a render, or had verticals corrected in post. In `camera.verticals: plumb`, the optical axis is horizontal, `pitch_deg` means camera elevation, and the principal point is fitted. Switching to plumb dropped the fit's excess from 0.105 to 0.076.
 2. **Silhouette alone cannot fix focal length.** Across focal 5k–40k px, the best containment excess stays between 0.076 and 0.086. Over the same range, the receding (W) edge slope swings from 1.17 to 0.58, which is the difference between a right-looking and a wrong-looking W line. `test_silhouette_alone_cannot_pin_focal` pins this down.
@@ -47,7 +52,7 @@ The assisted fit gives yaw -39°, focal ≈ 8.4k px, elevation 13°. Its box cor
 
 ## Open decisions (plan §13) and current stand-ins
 
-- **Fonts:** Montserrat Medium/Bold/Regular and Oswald SemiBold (OFL, in `fonts/`) stand in for the brand faces. Swap `tokens.fonts.*.family` and drop the brand TTFs in `fonts/`.
+- **Fonts:** Gibson SemiBold and Regular (see House assumptions). Montserrat (OFL) is only the measuring stand-in. Its stems are thinner than Gibson's, so the condensed "38" previews lighter than the approved image.
 - **Label format:** `{value:g}”`, taken from spec verbatim.
 - **Callouts:** can count and interior dims, included only when present in the spec.
 - **Still needed:** a calibration shot per profile, the number of angle profiles, whether outer dims include handles, canvas sizes beyond 2000², and an approved-image library (for M6).

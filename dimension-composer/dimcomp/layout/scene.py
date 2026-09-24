@@ -17,7 +17,7 @@ from ..config import Resolved
 from ..geometry.fit import FitResult
 from ..geometry.silhouette import Silhouette
 from .annotations import Dim, build_dims
-from .text_metrics import TextBox, measure_tok
+from .text_metrics import TextBox, _pil, measure_tok
 
 SUPERSCRIPTS = "®™"  # ® ™
 SUP_SCALE, SUP_RISE = 0.5, 0.42  # of font size / of cap height
@@ -48,6 +48,7 @@ class Context:
     sil: Silhouette  # working resolution
     clutter: dict  # side -> clutter score
     cache: dict = field(default_factory=dict)  # param-independent pieces (title, callouts)
+    photo_info: object = None  # geometry.photo.PhotoInfo
 
     @property
     def work_scale(self) -> float:
@@ -59,7 +60,7 @@ class Context:
 
     def text(self, s: str, tok_name: str) -> TextBox:
         st = self.cfg.style
-        return measure_tok(s, getattr(st.tokens.fonts, tok_name), st.canvas.w, str(self.cfg.fonts_dir))
+        return measure_tok(s, getattr(st.tokens.fonts, tok_name), st.canvas.w, self.cfg.font_dirs, st.font_fallbacks)
 
 
 @dataclass
@@ -112,7 +113,6 @@ def split_line(p0, p1, box, gap):
 
 def rich_runs(text: str, tb: TextBox) -> tuple[list[dict], float]:
     """Split ®/™ into superscript runs; return runs and total advance."""
-    from .text_metrics import measure
     runs, buf = [], ""
     for ch in text:
         if ch in SUPERSCRIPTS:
@@ -125,11 +125,11 @@ def rich_runs(text: str, tb: TextBox) -> tuple[list[dict], float]:
     if buf:
         runs.append({"text": buf, "scale": 1.0, "rise": 0.0})
     adv = 0.0
-    fonts_dir = str(Path(tb.face.path).parent)
     for r in runs:
-        m = measure(r["text"], fonts_dir, tb.face.family, tb.face.weight, tb.size * r["scale"], 0.0)
-        r["advance"] = m.advance
-        adv += m.advance
+        font = _pil(tb.face.path, round(tb.size * r["scale"] * 4))
+        n = len(r["text"])
+        r["advance"] = (font.getlength(r["text"]) + tb.tracking_px * r["scale"] * max(n - 1, 0)) * tb.h_scale
+        adv += r["advance"]
     return runs, adv
 
 
@@ -140,9 +140,10 @@ def text_layer(id_: str, tb: TextBox, x: float, cy: float, fill: str, align="cen
     baseline = cy + tb.cap / 2
     x0 = x - adv / 2 if align == "center" else x
     layer = {"id": id_, "type": "text", "text": text, "runs": runs,
-             "font": {"family": tb.face.family, "weight": tb.face.weight, "size": round(tb.size, 2),
-                      "file": Path(tb.face.path).name, "tracking_px": round(tb.tracking_px, 2),
-                      "cap": round(tb.cap, 2)},
+             "font": {"family": tb.requested, "postscript": tb.postscript, "substituted": tb.substituted,
+                      "render_family": tb.face.family, "weight": tb.face.weight, "file": Path(tb.face.path).name,
+                      "size": round(tb.size, 2), "tracking_px": round(tb.tracking_px, 2),
+                      "h_scale": tb.h_scale, "cap": round(tb.cap, 2)},
              "x": round(x0, 2), "y": round(baseline, 2), "align": "left", "fill": fill,
              "box": [round(v, 2) for v in (x0, cy - tb.cap / 2, x0 + adv, cy + tb.cap / 2)]}
     return layer, tuple(layer["box"])
@@ -171,7 +172,7 @@ def callout_cans(ctx: Context, zone: tuple) -> tuple[dict, tuple]:
     head = ctx.text("HOLDS UP TO", "callout_text_bold")
     head_l, head_box = text_layer("cans_head", head, cx, y0 + head.cap / 2, col.callout_text)
     num = ctx.text(str(ctx.cfg.spec.can_count), "callout_num")
-    word = ctx.text("CANS", "callout_text_bold")
+    word = ctx.text("CANS", "callout_word")
     can_top = head_box[3] + 0.9 * head.cap
     can_w = max(num.advance, word.advance) * 1.35
     can_h = y1 - can_top

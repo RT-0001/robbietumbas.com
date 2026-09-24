@@ -8,6 +8,7 @@ from PIL import Image
 
 from .config import Resolved
 from .geometry import silhouette
+from .geometry.photo import load_photo
 from .geometry.box import Box
 from .geometry.camera import Intrinsics
 from .geometry.fit import Evidence, FitResult, fit
@@ -26,7 +27,7 @@ def evidence_path(cfg: Resolved) -> Path:
 
 
 def load_context(cfg: Resolved, refit: bool = False, debug_dir: Path | None = None) -> Context:
-    photo = silhouette.load_rgba(cfg.photo_path)
+    photo, info = load_photo(cfg.photo_path, require_alpha=cfg.style.fit.require_alpha)
     s = cfg.style.fit.working_long_edge / max(photo.size)
     size = (round(photo.width * s), round(photo.height * s))
     work = photo.resize(size, Image.LANCZOS)
@@ -48,16 +49,32 @@ def load_context(cfg: Resolved, refit: bool = False, debug_dir: Path | None = No
         draw_fit(photo, res, sil.hull, debug_dir / "debug_fit.png")
     src = str(cfg.photo_path.relative_to(cfg.root))
     clutter = {side: sil.side_clutter(side) for side in ("left", "right")}
-    return Context(cfg, res, photo, src, sil, clutter)
+    return Context(cfg, res, photo, src, sil, clutter, photo_info=info)
+
+
+def font_report(ctx: Context) -> dict:
+    """token -> requested vs. actually measured face; substitutions must be fixed before sign-off."""
+    out = {}
+    for name in type(ctx.cfg.style.tokens.fonts).model_fields:
+        tb = ctx.text("0", name)
+        out[name] = {"requested": f"{tb.requested} {tb.face.weight if not tb.substituted else ''}".strip(),
+                     "postscript": tb.postscript, "measured_with": Path(tb.face.path).name,
+                     "substituted": tb.substituted}
+    return out
 
 
 def write_layout(ctx: Context, lay: Layout, out_dir: Path, name: str, png: bool = True) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / f"{name}.scene.json").write_text(json.dumps(lay.scene, indent=1))
-    svg = to_svg(lay.scene, ctx.cfg.root, embed=True)
+    svg = to_svg(lay.scene, ctx.cfg.root, embed=True, images={ctx.photo_src: ctx.photo})
     (out_dir / f"{name}.svg").write_text(svg)
     files = {"scene": f"{name}.scene.json", "svg": f"{name}.svg"}
     if png:
-        svg_to_png(svg, ctx.cfg.fonts_dir, out_dir / f"{name}.png")
+        dirs = {str(Path(t.face.path).parent) for t in _faces(ctx)} | set(ctx.cfg.font_dirs)
+        svg_to_png(svg, sorted(dirs), out_dir / f"{name}.png")
         files["png"] = f"{name}.png"
     return files
+
+
+def _faces(ctx: Context):
+    return [ctx.text("0", n) for n in type(ctx.cfg.style.tokens.fonts).model_fields]

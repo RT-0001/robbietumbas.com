@@ -1,15 +1,22 @@
 # Defaults measured off the approved Trailmate 25 QT image (1154px, scaled to ratios).
 name: igloo_default
 fonts_dir: fonts
+# House face is Gibson (SemiBold + Regular). Licensed files are not in the repo: drop the
+# .otf/.ttf into fonts/ or list their folder here. Until then Montserrat stands in,
+# sized by cap height, and report.json lists the substitution.
+font_search_dirs: []
+font_fallbacks: { Gibson: Montserrat }
 canvas: { w: 2000, h: 2000, bg: "#E1E3E2" }
 
 tokens:
+  # cap_ratio = cap height / canvas width, measured on the approved Trailmate 25 image
   fonts:
-    title:             { family: Montserrat, weight: 700, size_ratio: 0.042, tracking: 0 }
-    label:             { family: Montserrat, weight: 500, size_ratio: 0.030 }
-    callout_num:       { family: Oswald,     weight: 600, size_ratio: 0.080 }
-    callout_text:      { family: Montserrat, weight: 400, size_ratio: 0.021 }
-    callout_text_bold: { family: Montserrat, weight: 700, size_ratio: 0.021 }
+    title:             { family: Gibson, weight: 600, cap_ratio: 0.0300 }
+    label:             { family: Gibson, weight: 600, cap_ratio: 0.0210 }
+    callout_num:       { family: Gibson, weight: 600, cap_ratio: 0.0580, h_scale: 0.65 }  # "38": condensed via horizontal scale
+    callout_word:      { family: Gibson, weight: 600, cap_ratio: 0.0190 }  # "CANS"
+    callout_text:      { family: Gibson, weight: 400, cap_ratio: 0.0170 }  # "INTERIOR DIMENSIONS (L x W x H):"
+    callout_text_bold: { family: Gibson, weight: 600, cap_ratio: 0.0160 }  # "HOLDS UP TO", interior values
   colors: { line: "#1A1A1A", text: "#111111", callout_text: "#2B2B2B", can_fill: "#B9BCBF" }
   stroke_ratio: 0.0016            # line weight / canvas width
   label_gap_capheights: 0.6

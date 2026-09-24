@@ -32,7 +32,7 @@ class Spec(Strict):
     interior_dims_in: Dims | None = None
     can_count: int | None = Field(default=None, ge=1)
     angle_profile: str
-    photo: str | None = None  # defaults to photos/<sku>.png
+    photo: str | None = None  # defaults to photos/<sku>.tif|.tiff|.png
     overrides: dict = Field(default_factory=dict)
 
 
@@ -92,14 +92,26 @@ class Profile(Strict):
 class FontTok(Strict):
     family: str
     weight: int = 400
-    size_ratio: PositiveFloat  # font size / canvas width
+    # size by CAP HEIGHT / canvas width (font-independent: a stand-in font matches visually);
+    # size_ratio (em / canvas width) is accepted as an alternative
+    cap_ratio: PositiveFloat | None = None
+    size_ratio: PositiveFloat | None = None
     tracking: float = 0.0  # em units
+    h_scale: PositiveFloat = 1.0  # Photoshop horizontal scale (e.g. condensed "38")
+    postscript: str | None = None  # name the PSD text layer should request; default <Family>-<Weight>
+
+    @model_validator(mode="after")
+    def _one_size(self):
+        if (self.cap_ratio is None) == (self.size_ratio is None):
+            raise ValueError("give exactly one of cap_ratio / size_ratio")
+        return self
 
 
 class Fonts(Strict):
     title: FontTok
     label: FontTok
     callout_num: FontTok
+    callout_word: FontTok
     callout_text: FontTok
     callout_text_bold: FontTok
 
@@ -164,6 +176,7 @@ class Annotations(Strict):
 
 
 class FitCfg(Strict):
+    require_alpha: bool = True  # studio photos arrive masked + pre-keyed; no alpha is an error
     white_threshold: int = 245
     alpha_threshold: int = 128
     morph_px: int = 5
@@ -223,6 +236,9 @@ class Targets(Strict):
 class Style(Strict):
     name: str
     fonts_dir: str = "fonts"
+    font_search_dirs: list[str] = Field(default_factory=list)
+    # family -> stand-in used when the licensed files are missing; flagged in report.json
+    font_fallbacks: dict[str, str] = Field(default_factory=dict)
     canvas: Canvas = Canvas()
     tokens: Tokens
     layout: Layout

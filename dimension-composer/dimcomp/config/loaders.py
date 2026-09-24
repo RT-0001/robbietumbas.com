@@ -58,11 +58,21 @@ class Resolved:
 
     @property
     def photo_path(self) -> Path:
-        return self.root / (self.spec.photo or f"photos/{self.spec.sku}.png")
+        if self.spec.photo:
+            return self.root / self.spec.photo
+        from ..geometry.photo import find_photo
+        return find_photo(self.root, self.spec.sku)
 
     @property
     def fonts_dir(self) -> Path:
         return self.root / self.style.fonts_dir
+
+    @property
+    def font_dirs(self) -> tuple[str, ...]:
+        """Project fonts first, then any extra dirs (e.g. where licensed Gibson is installed)."""
+        extra = [Path(d).expanduser() for d in self.style.font_search_dirs]
+        extra = [d if d.is_absolute() else self.root / d for d in extra]
+        return tuple(str(d) for d in [self.fonts_dir, *extra] if d.is_dir())
 
     def dump(self) -> dict:
         return {

@@ -15,10 +15,14 @@ def _attr(v) -> str:
 
 
 def _text(layer: dict) -> str:
+    """render_family is the face actually measured (a stand-in if Gibson is missing)."""
     f = layer["font"]
-    out = [f'<text id="{_attr(layer["id"])}" x="{layer["x"]}" y="{layer["y"]}" '
-           f'font-family="{_attr(f["family"])}" font-weight="{f["weight"]}" font-size="{f["size"]}" '
-           f'fill="{layer["fill"]}" xml:space="preserve"'
+    h = f.get("h_scale", 1.0)
+    pos = (f'transform="translate({layer["x"]} {layer["y"]}) scale({h} 1)" x="0" y="0"' if h != 1.0
+           else f'x="{layer["x"]}" y="{layer["y"]}"')
+    out = [f'<text id="{_attr(layer["id"])}" {pos} '
+           f'font-family="{_attr(f.get("render_family", f["family"]))}" font-weight="{f["weight"]}" '
+           f'font-size="{f["size"]}" fill="{layer["fill"]}" xml:space="preserve"'
            + (f' letter-spacing="{f["tracking_px"]}"' if f.get("tracking_px") else "") + ">"]
     for r in layer["runs"]:
         if r["scale"] == 1.0 and r["rise"] == 0.0:
@@ -65,26 +69,38 @@ def _dimension(layer: dict) -> str:
     return "".join(parts)
 
 
-def _image(layer: dict, root: Path, embed: bool) -> str:
+def _image(layer: dict, root: Path, embed: bool, images: dict) -> str:
+    """Embeds a PNG preview resampled to its placed size; the scene keeps the original
+    (e.g. a 16-bit TIFF) as src for the PSD export."""
     t = layer["transform"]
     w, h = layer["size"]
     if embed:
+        img = images.get(layer["src"])
+        if img is None:
+            from ..geometry.photo import load_photo
+            img, _ = load_photo(root / layer["src"], require_alpha=False)
+        pw, ph = max(1, round(w * t["scale"])), max(1, round(h * t["scale"]))
+        if pw < img.width:
+            img = img.resize((pw, ph), Image.LANCZOS)
         buf = io.BytesIO()
-        Image.open(root / layer["src"]).save(buf, format="PNG")
+        img.save(buf, format="PNG")
         href = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
-    else:
-        href = _attr(layer["src"])
+        # keep placement in original-pixel units regardless of preview size
+        return (f'<image id="{layer["id"]}" href="{href}" width="{w}" height="{h}" '
+                f'transform="matrix({t["scale"]} 0 0 {t["scale"]} {t["tx"]} {t["ty"]})" '
+                f'preserveAspectRatio="none"/>')
+    href = _attr(layer["src"])
     return (f'<image id="{layer["id"]}" href="{href}" width="{w}" height="{h}" '
             f'transform="matrix({t["scale"]} 0 0 {t["scale"]} {t["tx"]} {t["ty"]})" '
             f'preserveAspectRatio="none"/>')
 
 
-def _node(layer: dict, root: Path, embed: bool) -> str:
+def _node(layer: dict, root: Path, embed: bool, images: dict) -> str:
     kind = layer["type"]
     if kind == "text":
         return _text(layer)
     if kind == "image":
-        return _image(layer, root, embed)
+        return _image(layer, root, embed, images)
     if kind == "dimension":
         return _dimension(layer)
     if kind == "rect":
@@ -93,14 +109,14 @@ def _node(layer: dict, root: Path, embed: bool) -> str:
     if kind == "path":
         return f'<path id="{layer["id"]}" d="{layer["d"]}" fill="{layer["fill"]}"/>'
     if kind == "group":
-        inner = "".join(_node(c, root, embed) for c in layer["children"])
+        inner = "".join(_node(c, root, embed, images) for c in layer["children"])
         return f'<g id="{layer["id"]}">{inner}</g>'
     raise ValueError(f"unknown layer type {kind}")
 
 
-def to_svg(scene: dict, root: Path, embed: bool = True) -> str:
+def to_svg(scene: dict, root: Path, embed: bool = True, images: dict | None = None) -> str:
     c = scene["canvas"]
-    body = "".join(_node(l, root, embed) for l in scene["layers"])
+    body = "".join(_node(l, root, embed, images or {}) for l in scene["layers"])
     return (f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
             f'width="{c["w"]}" height="{c["h"]}" viewBox="0 0 {c["w"]} {c["h"]}">'
             f'<rect id="background" width="{c["w"]}" height="{c["h"]}" fill="{c["bg"]}"/>{body}</svg>')
