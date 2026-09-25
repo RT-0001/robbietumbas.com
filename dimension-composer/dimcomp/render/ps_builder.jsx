@@ -8,17 +8,17 @@
 var STEP = "start";
 var WARN = [];
 
-function px(v) { return Number(v.as("px")); }
-function bnds(layer) { var b = layer.bounds; return [px(b[0]), px(b[1]), px(b[2]), px(b[3])]; }
-function color(hex) { var c = new SolidColor(); c.rgb.hexValue = hex.replace("#", ""); return c; }
-function norm(s) { return String(s).toLowerCase().replace(/[\s_-]/g, ""); }
+var px = function (v) { return Number(v.as("px")); };
+var bnds = function (layer) { var b = layer.bounds; return [px(b[0]), px(b[1]), px(b[2]), px(b[3])]; };
+var color = function (hex) { var c = new SolidColor(); c.rgb.hexValue = hex.replace("#", ""); return c; };
+var norm = function (s) { return String(s).toLowerCase().replace(/[\s_-]/g, ""); };
 
 // ---- fonts ----------------------------------------------------------------
 var FONT_CACHE = {};
 var STYLE_NAMES = { 100: "thin", 200: "extralight", 300: "light", 400: "regular", 500: "medium",
                     600: "semibold", 700: "bold", 800: "extrabold", 900: "black" };
 
-function findFont(family, weight, psHint) {
+var findFont = function (family, weight, psHint) {
     var key = family + "|" + weight;
     if (FONT_CACHE[key]) return FONT_CACHE[key];
     var want = STYLE_NAMES[weight] || "regular";
@@ -39,10 +39,10 @@ function findFont(family, weight, psHint) {
     }
     FONT_CACHE[key] = hit;
     return hit;
-}
+};
 
 var CAP_CACHE = {};
-function capRatio(doc, ps) {
+var capRatio = function (doc, ps) {
     // cap height / font size, measured on a throwaway "H"
     if (CAP_CACHE[ps]) return CAP_CACHE[ps];
     var l = doc.artLayers.add();
@@ -53,10 +53,10 @@ function capRatio(doc, ps) {
     l.remove();
     CAP_CACHE[ps] = (b[3] - b[1]) / 200;
     return CAP_CACHE[ps];
-}
+};
 
 // Text centered on its cap height at (cx, cy). Returns the layer.
-function addText(doc, parent, spec, cx, cy, capPx, opts) {
+var addText = function (doc, parent, spec, cx, cy, capPx, opts) {
     opts = opts || {};
     var f = spec.font;
     var ps = findFont(f.family, f.weight, null);
@@ -75,7 +75,7 @@ function addText(doc, parent, spec, cx, cy, capPx, opts) {
     var b = bnds(l);
     if (opts.hangX !== undefined) {
         // center only the numerals on hangX; the trailing inch mark hangs outside
-        var digits = String(t.contents).replace(/[\u201d\u2033"']+$/, "");
+        var digits = stripInchMarks(String(t.contents));
         var tmp = parent.artLayers.add(); tmp.kind = LayerKind.TEXT;
         tmp.textItem.contents = digits; tmp.textItem.font = ps; tmp.textItem.size = new UnitValue(size, "px");
         tmp.textItem.position = [0, size * 2];
@@ -85,12 +85,22 @@ function addText(doc, parent, spec, cx, cy, capPx, opts) {
         l.translate((cx - (b[0] + b[2]) / 2), 0);    // exact horizontal centering on real glyphs
     }
     return l;
-}
+};
 
-function cxcy(box) { return [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2, box[3] - box[1]]; }
+// trailing inch marks off the end (no regex: old parsers misread quotes inside regex literals)
+var stripInchMarks = function (str) {
+    var end = str.length;
+    while (end > 0) {
+        var code = str.charCodeAt(end - 1);
+        if (code === 0x201D || code === 0x2033 || code === 34 || code === 39) end--; else break;
+    }
+    return str.substring(0, end);
+};
 
-// Title: ® / ™ become their own small raised layers (DOM text can't style a sub-range)
-function addTitle(doc, spec) {
+var cxcy = function (box) { return [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2, box[3] - box[1]]; };
+
+// Title: registered / trademark signs become their own small raised layers (DOM text can't style a sub-range)
+var addTitle = function (doc, spec) {
     var c = cxcy(spec.box), cap = c[2];
     var runs = spec.runs;
     if (runs.length === 1) return addText(doc, doc, spec, c[0], c[1], cap, { name: "title" });
@@ -122,19 +132,19 @@ function addTitle(doc, spec) {
         x += widths[i];
     }
     return grp;
-}
+};
 
-function measureSpace(doc, ps, size) {
-    function w(s) {
+var measureSpace = function (doc, ps, size) {
+    var w = function (s) {
         var l = doc.artLayers.add(); l.kind = LayerKind.TEXT;
         l.textItem.contents = s; l.textItem.font = ps; l.textItem.size = new UnitValue(size, "px"); l.textItem.position = [0, size * 2];
         var b = bnds(l); l.remove(); return b[2] - b[0];
-    }
+    };
     return w("H H") - w("HH");
-}
+};
 
 // ---- shapes ---------------------------------------------------------------
-function makePath(doc, polys, name) {
+var makePath = function (doc, polys, name) {
     var subs = [];
     for (var i = 0; i < polys.length; i++) {
         var pts = [];
@@ -149,10 +159,10 @@ function makePath(doc, polys, name) {
         subs.push(sp);
     }
     return doc.pathItems.add(name, subs);
-}
+};
 
 // Vector shape layer (solid fill + vector mask) from polygons; raster fallback if the action fails.
-function addShape(doc, polys, hex, name) {
+var addShape = function (doc, polys, hex, name) {
     STEP = "shape " + name;
     var path = makePath(doc, polys, name + "_path");
     var c = color(hex);
@@ -178,10 +188,10 @@ function addShape(doc, polys, hex, name) {
     }
     try { path.remove(); } catch (e2) {}
     return doc.activeLayer;
-}
+};
 
 // Thin quad per segment = stroked line as a filled vector shape
-function lineQuads(segs, w) {
+var lineQuads = function (segs, w) {
     var out = [];
     for (var i = 0; i < segs.length; i++) {
         var a = segs[i][0], b = segs[i][1];
@@ -191,10 +201,10 @@ function lineQuads(segs, w) {
         out.push([[a[0] + nx, a[1] + ny], [b[0] + nx, b[1] + ny], [b[0] - nx, b[1] - ny], [a[0] - nx, a[1] - ny]]);
     }
     return out;
-}
+};
 
 // Line minus padded label box (Liang-Barsky clip) -> 0..2 segments
-function splitLine(p0, p1, box, gap) {
+var splitLine = function (p0, p1, box, gap) {
     var x0 = box[0] - gap, y0 = box[1] - gap, x1 = box[2] + gap, y1 = box[3] + gap;
     var dx = p1[0] - p0[0], dy = p1[1] - p0[1];
     var P = [-dx, dx, -dy, dy], Q = [p0[0] - x0, x1 - p0[0], p0[1] - y0, y1 - p0[1]];
@@ -205,17 +215,17 @@ function splitLine(p0, p1, box, gap) {
         if (P[i] < 0) { if (r > tin) tin = r; } else { if (r < tout) tout = r; }
     }
     if (tin >= tout) return [[p0, p1]];
-    function at(t) { return [p0[0] + dx * t, p0[1] + dy * t]; }
+    var at = function (t) { return [p0[0] + dx * t, p0[1] + dy * t]; };
     var out = [];
     if (tin > 0.001) out.push([p0, at(tin)]);
     if (tout < 0.999) out.push([at(tout), p1]);
     return out;
-}
+};
 
-function inGroup(layer, grp) { try { layer.move(grp, ElementPlacement.PLACEATEND); } catch (e) {} }
+var inGroup = function (layer, grp) { try { layer.move(grp, ElementPlacement.PLACEATEND); } catch (e) {} };
 
 // ---- images ---------------------------------------------------------------
-function b64decode(str) {
+var b64decode = function (str) {
     var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     var out = [], buf = 0, bits = 0;
     for (var i = 0; i < str.length; i++) {
@@ -227,18 +237,18 @@ function b64decode(str) {
         if (bits >= 8) { bits -= 8; out.push(String.fromCharCode((buf >> bits) & 255)); }
     }
     return out.join("");
-}
+};
 
-function assetFile(name) {
+var assetFile = function (name) {
     var f = new File(Folder.temp + "/dimcomp_" + name);
     f.encoding = "BINARY";
     f.open("w"); f.write(b64decode(DATA.assets[name])); f.close();
     return f;
-}
+};
 
 // Open an image, copy its (merged) layer into doc as a smart object named `name`,
 // and fit its visible pixels to target [x0, y0, x1, y1].
-function placeImage(doc, f, target, name, checkAspect) {
+var placeImage = function (doc, f, target, name, checkAspect) {
     var src = app.open(f);
     if (src.layers.length > 1) src.mergeVisibleLayers();
     var srcLayer = src.activeLayer;
@@ -259,9 +269,9 @@ function placeImage(doc, f, target, name, checkAspect) {
     b = bnds(lay);
     lay.translate(target[0] - b[0], target[1] - b[1]);
     return lay;
-}
+};
 
-function placeProduct(doc, spec) {
+var placeProduct = function (doc, spec) {
     STEP = "open product photo";
     var f = new File(File($.fileName).parent + "/" + spec.src_name);
     if (!f.exists) {
@@ -270,10 +280,10 @@ function placeProduct(doc, spec) {
     }
     STEP = "place product";
     return placeImage(doc, f, spec.alpha_bbox, "product", true);
-}
+};
 
 // ---- main -----------------------------------------------------------------
-function build() {
+var dimcompBuild = function () {
     var C = DATA.scene.canvas;
     STEP = "new document";
     var oldBg = app.backgroundColor;
@@ -335,14 +345,14 @@ function build() {
     var opts = new PhotoshopSaveOptions(); opts.layers = true; opts.embedColorProfile = true;
     doc.saveAs(out, opts, true, Extension.LOWERCASE);
     return out;
-}
+};
 
 (function () {
     var ru = app.preferences.rulerUnits, tu = app.preferences.typeUnits;
     app.preferences.rulerUnits = Units.PIXELS;
     app.preferences.typeUnits = TypeUnits.PIXELS;
     try {
-        var out = build();
+        var out = dimcompBuild();
         alert("Built " + DATA.out_name + ".psd\n" + (WARN.length ? "\nCheck:\n- " + WARN.join("\n- ") : "No warnings."));
     } catch (e) {
         alert("dimcomp stopped at step: " + STEP + "\n\n" + e + (e.line ? "\n(script line " + e.line + ")" : "") +

@@ -22,6 +22,32 @@ def test_builder_is_es3():
         assert not re.search(pat, src), pat
 
 
+def test_builder_avoids_extendscript_parser_traps():
+    """Photoshop reported 'build is not a function' on a script that is valid ES3:
+    its tokenizer trips on quote characters inside regex literals, and top-level
+    function declarations must not rely on hoisting."""
+    src = LIB.read_text()
+    for lit in re.findall(r"(?<![\w)\]])/(?![/*])(?:\\.|[^/\n])+/[gim]*", src):
+        assert '"' not in lit and "'" not in lit, lit
+    assert not re.search(r"^function ", src, re.M)  # ordered `var f = function` only
+    assert src.isascii()
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_generated_script_is_strict_es3_ascii_short_lines(ctx, tmp_path):
+    lay = build_layout(ctx, Params())
+    text = to_jsx(lay.scene, "out", ctx.cfg.root)
+    assert text.isascii()
+    assert max(len(l) for l in text.splitlines()) <= 2000
+    f = tmp_path / "b.jsx"
+    f.write_text(text)
+    checker = Path(__file__).parent / "node" / "es3check.js"
+    if not (checker.parent / "node_modules" / "acorn").exists():
+        pytest.skip("acorn not installed (cd tests/node && npm install acorn)")
+    r = subprocess.run([NODE, str(checker), str(f)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout
+
+
 def run(ctx, tmp_path, fonts="gibson"):
     lay = build_layout(ctx, Params())
     jsx = tmp_path / "b.jsx"
