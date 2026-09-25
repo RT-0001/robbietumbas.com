@@ -21,7 +21,7 @@ def _text(layer: dict) -> str:
     pos = (f'transform="translate({layer["x"]} {layer["y"]}) scale({h} 1)" x="0" y="0"' if h != 1.0
            else f'x="{layer["x"]}" y="{layer["y"]}"')
     out = [f'<text id="{_attr(layer["id"])}" {pos} '
-           f'font-family="{_attr(f.get("render_family", f["family"]))}" font-weight="{f["weight"]}" '
+           f'font-family="{_attr(f.get("render_family", f["family"]))}" font-weight="{f.get("render_weight", f["weight"])}" '
            f'font-size="{f["size"]}" fill="{layer["fill"]}" xml:space="preserve"'
            + (f' letter-spacing="{f["tracking_px"]}"' if f.get("tracking_px") else "") + ">"]
     for r in layer["runs"]:
@@ -106,6 +106,9 @@ def _node(layer: dict, root: Path, embed: bool, images: dict) -> str:
     if kind == "rect":
         return (f'<rect id="{layer["id"]}" x="{layer["x"]:.2f}" y="{layer["y"]:.2f}" width="{layer["w"]:.2f}" '
                 f'height="{layer["h"]:.2f}" rx="{layer.get("rx", 0):.2f}" fill="{layer["fill"]}"/>')
+    if kind == "polygon":
+        pts = " ".join(f"{x},{y}" for x, y in layer["points"])
+        return f'<polygon id="{layer["id"]}" points="{pts}" fill="{layer["fill"]}"/>'
     if kind == "path":
         return f'<path id="{layer["id"]}" d="{layer["d"]}" fill="{layer["fill"]}"/>'
     if kind == "group":

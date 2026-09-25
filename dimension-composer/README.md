@@ -1,62 +1,66 @@
 # dimcomp: dimension image composer
 
-Composes Amazon-style dimension infographics from **real product photos**. It adds the title, perspective-correct dimension lines, labels and callouts, and never alters product pixels. Built from `dimension-composer-plan.md`; milestones **M0–M3** are done.
+Composes Amazon-style dimension infographics from **real product photos**. It adds the title, perspective-correct dimension lines, labels and callouts, and never alters product pixels. Built from `dimension-composer-plan.md`. Milestones M0–M3 are done, plus an MVP of M5: a Photoshop script that builds the layered PSD.
+
+## MVP workflow
+
+1. The designer sends a transparent copy of the masked product photo (a small PNG or TIFF is fine) plus the spec: title, L/W/H, interior dims, can count.
+2. `dimcomp run specs/<sku>.json` produces three ranked candidates. Each has a PNG preview and a **`<sku>_candidate_NN.jsx`**.
+3. In Photoshop: **File → Scripts → Browse…** → pick the `.jsx`. It asks for the full-res TIFF (or finds it next to the script) and builds `<sku>_dimensions_NN.psd` with:
+   - the product as a smart object, scaled to the layout;
+   - live **Gibson** text layers, found by name in Adobe Fonts;
+   - dimension lines and the can as vector shape layers, grouped and named like the scene.
+
+   Label gaps are cut from Photoshop's own measurement of the real Gibson text, so spacing is exact even though the previews use a stand-in font.
 
 ```
 pip install -e '.[dev]'
-dimcomp config specs/00034966.json                 # resolved config (style <- profile <- sku <- --set)
-dimcomp fit    specs/00034966.json                 # pose fit -> fits/<sku>.json + out/<sku>/debug_fit.png
-dimcomp run    specs/00034966.json                 # top-3 candidates (.svg/.png/.scene.json) + report.json
-dimcomp run    specs/00034966.json --set search.pinned.height_side=left --set annotations.ticks=arrows
-dimcomp batch  specs/
-pytest -q
+dimcomp run    specs/yukon70.json                  # candidates + .jsx + report.json in out/yukon70/
+dimcomp fit    specs/yukon70.json                  # pose only -> fits/<sku>.json + out/<sku>/debug_fit.png
+dimcomp config specs/yukon70.json                  # resolved config (style <- profile <- sku <- --set)
+dimcomp run    specs/yukon70.json --set search.pinned.height_side=left
+pytest -q                                          # 30 tests; the .jsx is executed against a Node mock of Photoshop
 ```
+
+## Template (styles/igloo_default.yaml)
+
+The template is measured on the approved **70 QT Yukon** export (2000²), which is the current template, and cross-checked against the Trailmate 25:
+- **Title:** Gibson SemiBold, cap height 0.032 of the canvas, centered at y 0.049.
+- **Labels:** Gibson SemiBold, cap height 0.0195. Lines are 4px black, stopping 0.8 cap-heights short of the label.
+- **Placement rule** (both approved images agree): the product is centered horizontally, and the bottom of the product-and-dims group sits at y **0.842**, just above the callout row. Scale is the largest that fits the safe area.
+- **Corner:** the W and L lines are extended to their shared corner, then each stops the same distance short of it (`corner_gap_ratio`), so the gap is symmetric and deliberate.
+- **Can callout:** positions and shape proportions are taken from the Yukon, and the can bleeds off the bottom edge. The can count shrinks to fit the can.
+- **Interior dims:** centered, "INTERIOR DIMENSIONS…" in Regular and the values in SemiBold.
+
+**These numbers are measured off exports.** Once the template PSD is available, its layer data should replace them.
+
+## How the fit works (and why it differs from the plan)
+
+- **Plumb verticals.** Both approved images have perfectly vertical edges (shift lens, a render, or Upright in post). So `camera.verticals: plumb` uses a horizontal optical axis, with `pitch_deg` meaning camera elevation and a fitted principal point.
+- **Body first, handles ignored.** Stage 1 fits the angles to the *body*: the outline after opening away thin protrusions such as handles and wire bails, with the box's L/W proportions free. So a handle can't tilt the box. The lines are drawn off that body box, so they hug the product the way a designer's do; labels still print the spec values verbatim. Setting `fit.dims_include_protrusions: true` makes the spec-size box swallow handles instead.
+- **Automatic line evidence.** An outline alone cannot pin the focal length. Across 5k–40k px, fit quality barely changes while the W line slope swings 2×. So the fit finds long straight product edges itself (panel lines, the base, lid edges), counts only those lying on a vertical face, assigns each to L or W, drops outliers, and refits with focal free. Hand-marked lines in `fits/<sku>_evidence.json` add to that.
+- **Consistent camera.** Both coolers converge on yaw about -41° and focal about 11–14k px, as expected from one studio setup.
+- **Visual offsets.** A 3D ground offset toward the camera is foreshortened by about sin(elevation). So offsets are specified on screen (a fraction of the projected box diagonal), and the 3D offset is solved per edge: the lines converge correctly and still look evenly spaced.
+- **Hard layout rules:** labels and lines keep clear of the product, of each other (no crossing or crowding between dimensions), of the title, of the callouts, and of the safe-area margins. A candidate that breaks any of them never outranks a clean one.
 
 ## House assumptions
 
-- **Photos:** every studio photo arrives masked and pre-keyed as a TIFF with a transparent background, at `photos/<sku>.tif`. The loader (`geometry/photo.py`, via tifffile) handles 8/16-bit, straight and premultiplied alpha, a saved mask channel, CMYK, and embedded ICC profiles (converted to sRGB for preview). A TIFF with no alpha, or an all-opaque one, is an error that points at Photoshop's "Save Transparency" option. Silhouettes come from alpha; the white-threshold path only runs with `fit.require_alpha: false`. The scene keeps the original TIFF as `src` for the PSD export, and the SVG/PNG previews embed a copy resampled to its placed size.
-- **Type:** all Gibson, SemiBold and Regular. Measured on the approved image: title, dimension labels, "HOLDS UP TO", "CANS" and the interior values are SemiBold (stem/cap 0.20–0.25); "INTERIOR DIMENSIONS…" is Regular (0.12); "38" is SemiBold at about 65% horizontal scale (`h_scale`). Sizes are set by cap height (`cap_ratio`), so any face lands at the approved visual size. Gibson is commercial and not in the repo: put the licensed files in `fonts/` or list their folder in `font_search_dirs`. Until then Montserrat stands in. `report.json` → `font_substitutions` and a CLI warning flag it, and scene text layers still carry `postscript: Gibson-SemiBold` / `Gibson-Regular` for the PSD.
+- **Photos** are masked, pre-keyed TIFFs with transparency (8/16-bit, straight or premultiplied alpha, a saved mask channel, CMYK, and ICC profiles converted to sRGB). A TIFF without transparency is an error that points at Photoshop's "Save Transparency" option.
+- **Type** is all Gibson, SemiBold plus Regular. Gibson is licensed through Adobe Fonts, so only Photoshop has it. The `.jsx` sets real Gibson, while the previews use Montserrat sized by cap height, and `report.json` → `font_substitutions` flags that.
 
-On the fixture, search takes about 4.5s for about 980 layout evaluations. Rendering takes about 4s. A fresh fit takes about 10s, and the result is cached in `fits/`.
+## Fixtures
 
-## Pipeline
+| SKU | Photo | Fit |
+|---|---|---|
+| `yukon70` | cut from the approved Yukon export | automatic (5 detected lines) |
+| `00034966` Trailmate 25 | cut from the approved Trailmate export | assisted: 1 hand-marked W line + 1 H line, plus detected lines |
 
-`spec + photo → silhouette → box fit (pose) → 3D annotations → LHS search + refine → scene.json → SVG/PNG`
+## Open decisions
 
-| Module | Role |
-|---|---|
-| `config/` | pydantic models, deep-merge precedence, `--set a.b=c` session patches; a bad patch fails naming its layer |
-| `geometry/camera.py` | pinhole camera, `plumb` / `converge` models, project/unproject, backface test |
-| `geometry/box.py` | named vertices, edges and faces |
-| `geometry/silhouette.py` | alpha or white threshold, hull, side-clutter score |
-| `geometry/fit.py` | one objective: containment of the silhouette + optional line/corner evidence |
-| `layout/annotations.py` | 3D dims → 2D, with offsets solved *visually* |
-| `layout/scene.py` | params → canvas geometry + scene graph (single source of truth) |
-| `layout/cost.py`, `search.py` | hard/soft terms, each reported raw and weighted; pins via `search.pinned` |
-| `render/` | SVG, PNG (resvg, project fonts only), fit debug overlay |
-
-## Where this deviates from the plan, and why
-
-Everything below was measured on the approved Trailmate 25 image (`tests/fixtures/reference_00034966.jpg`). The fixture photo `photos/00034966.tif` is the product cut out of that image, saved as a 16-bit straight-alpha TIFF with an sRGB profile.
-
-1. **Verticals are plumb, so the camera model needed a `plumb` mode.** On the approved image, the silhouette's left edge sits at x=230 across 160px of height, and the front-left seam at x=423 drifts only 1px over 240px. A pinhole camera pitched down 18° would lean them about 19px. The shot was made with a shift lens, is a render, or had verticals corrected in post. In `camera.verticals: plumb`, the optical axis is horizontal, `pitch_deg` means camera elevation, and the principal point is fitted. Switching to plumb dropped the fit's excess from 0.105 to 0.076.
-2. **Silhouette alone cannot fix focal length.** Across focal 5k–40k px, the best containment excess stays between 0.076 and 0.086. Over the same range, the receding (W) edge slope swings from 1.17 to 0.58, which is the difference between a right-looking and a wrong-looking W line. `test_silhouette_alone_cannot_pin_focal` pins this down.
-3. **Manual mode uses lines, not just corners.** Bounding-box corners float in air on a rounded, lid-overhung cooler, so there is nothing to click. Straight features along an axis do exist: a gasket band, a lid edge, a seam. `fits/<sku>_evidence.json` takes `lines: {L|W|H: [[p,q],...]}` (plus optional `corners`). These feed the same objective as the auto fit, and focal becomes free. Synthetic test: from a deliberately wrong 5000px guess, focal is recovered within 5% and yaw within 1°. The fixture uses one W line (left gasket band, 0.7px residual over 168px) and one H line (the plumb seam).
-4. **Offsets are visual, not 3D.** A ground-plane offset toward the camera is foreshortened by about sin(elevation) ≈ 0.23. With a shared 3D offset, the H line sat about 4× farther out than L and W, and the labels touched the product. `offset_ratio` is now the on-screen distance divided by the projected box diagonal. Each L/W edge solves for the 3D offset that lands there, so lines still converge correctly but look equally spaced (`offset_equality` ≈ 1e-5). The approved image measures about 0.06.
-5. **H defaults to `screen_vertical`.** The approved image draws H plumb, spanning the projected box end on that side (y 209→794), not along a 3D edge. `annotations.height_mode: edge` gives the plan's version.
-6. **Style defaults were measured, not guessed.** The plan's font ratios (title 0.042, label 0.030) and reserved zones match the approved image. The plan's implied fill did not: the approved group fills **0.85** of the safe area at group scale **0.94**. At 0.62, the product came out visibly small. Stroke is 0.0016 (measured), not 0.0012.
-
-## Fixture fit: an open question
-
-The assisted fit gives yaw -39°, focal ≈ 8.4k px, elevation 13°. Its box corner lands where the designer broke the W and L lines. But the face-width ratio on the photo suggests yaw ≈ -24°. One cropped composite can't settle this. A calibration shot per profile (plan §13) or two clean lines per axis would. The profile says `calibrated: false` until then.
-
-## Open decisions (plan §13) and current stand-ins
-
-- **Fonts:** Gibson SemiBold and Regular (see House assumptions). Montserrat (OFL) is only the measuring stand-in. Its stems are thinner than Gibson's, so the condensed "38" previews lighter than the approved image.
-- **Label format:** `{value:g}”`, taken from spec verbatim.
-- **Callouts:** can count and interior dims, included only when present in the spec.
-- **Still needed:** a calibration shot per profile, the number of angle profiles, whether outer dims include handles, canvas sizes beyond 2000², and an approved-image library (for M6).
+- **Handles:** do spec outer dims include the handles? This decides `fit.dims_include_protrusions`.
+- **Template PSD:** needed to replace the measured numbers with exact layer values (can shape, stroke, tracking).
+- **Canvas sizes** beyond 2000², **more angle profiles**, and an **approved-image library** for style learning (M6).
 
 ## Next
 
-M4 tuning UI (clicking evidence lines replaces clicking corners) → M5 PSD with native text layers → M6 style learning (`targets.*` and `ranges.*` above are hand-measured from one image; M6 automates that) → M7 batch contact sheets and the optional VLM tiebreaker.
+M4 tuning UI (drag labels; mark lines) → M6 style learning from approved images → M7 batch contact sheets.

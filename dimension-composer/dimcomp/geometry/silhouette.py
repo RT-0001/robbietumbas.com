@@ -14,6 +14,7 @@ from shapely.geometry import MultiPoint, Polygon
 class Silhouette:
     mask: np.ndarray  # uint8 {0,1}, working resolution
     hull: Polygon
+    core_hull: Polygon  # hull after opening away thin protrusions (handles)
     contour: Polygon
     edges: np.ndarray  # uint8 {0,1} Canny edges inside the mask
 
@@ -63,4 +64,21 @@ def extract(img: Image.Image, fit_cfg) -> Silhouette:
 
     gray = cv2.cvtColor(a[..., :3], cv2.COLOR_RGB2GRAY)
     edges = (cv2.Canny(gray, 60, 160) > 0).astype(np.uint8) * cv2.erode(m, k)
-    return Silhouette(mask=m, hull=hull, contour=contour, edges=edges)
+    return Silhouette(mask=m, hull=hull, core_hull=_core(m, hull, fit_cfg.core_open_ratio),
+                      contour=contour, edges=edges)
+
+
+def _core(m: np.ndarray, hull: Polygon, ratio: float) -> Polygon:
+    """Body without handles: morphological opening with a disk ~ratio x bbox diagonal."""
+    x0, y0, x1, y1 = hull.bounds
+    d = int(round(ratio * np.hypot(x1 - x0, y1 - y0))) | 1
+    if d < 3:
+        return hull
+    opened = cv2.morphologyEx(m, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (d, d)))
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(opened)
+    if n < 2:
+        return hull
+    core = (lab == 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))).astype(np.uint8)
+    cnts, _ = cv2.findContours(core, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    c = max(cnts, key=cv2.contourArea)[:, 0, :].astype(float)
+    return MultiPoint([tuple(p) for p in c]).convex_hull

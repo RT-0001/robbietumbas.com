@@ -131,7 +131,11 @@ def search(ctx: Context) -> tuple[list[Candidate], dict]:
                 steps = {k: s / 2 for k, s in steps.items()}
         refined.append(best)
 
-    everything = sorted(pool + refined, key=lambda c: c.cost)
+    # a candidate with any hard violation never outranks a clean one
+    hard_keys = [k for k in pool[0].breakdown if k.startswith("hard_")] if pool else []
+    def is_clean(c):
+        return all(c.breakdown[k]["raw"] == 0 for k in hard_keys)
+    everything = sorted(pool + refined, key=lambda c: (not is_clean(c), c.cost))
     top: list[Candidate] = []
     for c in everything:
         u = space.unit(_vec(c))

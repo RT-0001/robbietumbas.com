@@ -9,7 +9,8 @@ from shapely.ops import unary_union
 
 from .scene import Context, Layout, safe_px, zone_px
 
-HARD = ("hard_product_clearance", "hard_label_overlap", "hard_outside_safe", "hard_reserved", "hard_legibility")
+HARD = ("hard_product_clearance", "hard_label_overlap", "hard_dim_crossing", "hard_outside_safe", "hard_reserved",
+        "hard_legibility")
 
 
 def _elements(lay: Layout):
@@ -41,6 +42,16 @@ def terms(ctx: Context, lay: Layout) -> dict[str, float]:
     boxes = [rect(*d.label_box).buffer(pad) for d in lay.dims]
     t["hard_label_overlap"] = sum(a.intersection(b).area / min(a.area, b.area)
                                   for a, b in itertools.combinations(boxes, 2))
+
+    # dimension lines/labels of different axes must not cross or crowd each other
+    crowd = 0.0
+    for a, b in itertools.combinations(lay.dims, 2):
+        zone_b = unary_union([rect(*b.label_box).buffer(clear)] + ([b.geom.buffer(clear)] if b.segments else []))
+        for x, y in a.segments:
+            seg = LineString([tuple(x), tuple(y)])
+            crowd += seg.intersection(zone_b).length / max(seg.length, 1.0)
+        crowd += rect(*a.label_box).intersection(zone_b).area / rect(*a.label_box).area
+    t["hard_dim_crossing"] = crowd
 
     safe = rect(*safe_px(st))
     group = unary_union([g for _, g in _elements(lay)] + [lay.hull])

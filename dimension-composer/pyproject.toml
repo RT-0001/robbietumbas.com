@@ -18,6 +18,8 @@ dependencies = [
   "fonttools>=4.40",
   "typer>=0.9",
   "resvg-py>=0.1",
+  "tifffile>=2024.1",
+  "imagecodecs>=2024.1",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +30,9 @@ dimcomp = "dimcomp.cli:app"
 
 [tool.setuptools.packages.find]
 include = ["dimcomp*"]
+
+[tool.setuptools.package-data]
+dimcomp = ["render/*.jsx"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

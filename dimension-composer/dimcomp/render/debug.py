@@ -21,7 +21,8 @@ def _dashed(draw, a, b, fill, width, dash=12):
 
 
 def draw_fit(photo: Image.Image, fit: FitResult, hull=None, out: Path | None = None,
-             max_px: int = 1400) -> Image.Image:
+             max_px: int = 1400, core=None) -> Image.Image:
+    """Blue: full outline hull. Magenta: body hull (handles opened away) used for the angles."""
     img = photo.convert("RGBA").resize(fit.image_size, Image.LANCZOS)
     bg = Image.new("RGBA", img.size, (235, 235, 235, 255))
     bg.alpha_composite(img)
@@ -33,9 +34,10 @@ def draw_fit(photo: Image.Image, fit: FitResult, hull=None, out: Path | None = N
     font = ImageFont.load_default(size=max(14, img.width // 70))
     off = np.array([pad, pad])
 
-    if hull is not None:
-        pts = [tuple(np.array(p) + off) for p in hull.exterior.coords]
-        d.line(pts, fill=(0, 150, 220, 255), width=lw)
+    for poly, col in ((hull, (0, 150, 220, 255)), (core, (200, 0, 160, 255))):
+        if poly is not None:
+            pts = [tuple(np.array(p) + off) for p in poly.exterior.coords]
+            d.line(pts, fill=col, width=lw)
 
     uv = {k: v + off for k, v in fit.box.project(fit.pose, fit.K).items()}
     visible = fit.box.visible_edges(fit.pose)

@@ -11,9 +11,10 @@ from .geometry import silhouette
 from .geometry.photo import load_photo
 from .geometry.box import Box
 from .geometry.camera import Intrinsics
-from .geometry.fit import Evidence, FitResult, fit
+from .geometry.fit import Evidence, FitResult, fit_with_auto_lines
 from .layout.scene import Context, Layout
 from .render.debug import draw_fit
+from .render.photoshop import to_jsx
 from .render.png import svg_to_png
 from .render.svg import to_svg
 
@@ -43,10 +44,10 @@ def load_context(cfg: Resolved, refit: bool = False, debug_dir: Path | None = No
         K0 = Intrinsics.from_profile(cfg.profile.camera, *size)
         box = Box.from_spec(cfg.spec.dims_in, cfg.profile.axis_map)
         ev = Evidence.load(evidence_path(cfg)).scaled(s) if evidence_path(cfg).exists() else None
-        res = fit(sil, box, K0, cfg.profile, cfg.style.fit, size, ev)
+        res = fit_with_auto_lines(sil, box, K0, cfg.profile, cfg.style.fit, size, ev)
         res.save(cached)
     if debug_dir is not None:
-        draw_fit(photo, res, sil.hull, debug_dir / "debug_fit.png")
+        draw_fit(photo, res, sil.hull, debug_dir / "debug_fit.png", core=sil.core_hull)
     src = str(cfg.photo_path.relative_to(cfg.root))
     clutter = {side: sil.side_clutter(side) for side in ("left", "right")}
     return Context(cfg, res, photo, src, sil, clutter, photo_info=info)
@@ -69,6 +70,9 @@ def write_layout(ctx: Context, lay: Layout, out_dir: Path, name: str, png: bool 
     svg = to_svg(lay.scene, ctx.cfg.root, embed=True, images={ctx.photo_src: ctx.photo})
     (out_dir / f"{name}.svg").write_text(svg)
     files = {"scene": f"{name}.scene.json", "svg": f"{name}.svg"}
+    jsx_name = f"{ctx.cfg.spec.sku}_{name}.jsx"
+    (out_dir / jsx_name).write_text(to_jsx(lay.scene, f"{ctx.cfg.spec.sku}_dimensions_{name.split('_')[-1]}"))
+    files["jsx"] = jsx_name
     if png:
         dirs = {str(Path(t.face.path).parent) for t in _faces(ctx)} | set(ctx.cfg.font_dirs)
         svg_to_png(svg, sorted(dirs), out_dir / f"{name}.png")

@@ -1,0 +1,9 @@
+{
+  "sku": "yukon70",
+  "title": "70 QT YUKON COOLER",
+  "dims_in": { "L": 30.7, "W": 17.5, "H": 18.3 },
+  "interior_dims_in": { "L": 24.3, "W": 12.2, "H": 13.6 },
+  "can_count": 112,
+  "angle_profile": "hardside_34_left",
+  "overrides": {}
+}

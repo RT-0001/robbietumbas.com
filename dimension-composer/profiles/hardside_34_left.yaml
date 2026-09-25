@@ -9,12 +9,12 @@ camera:
   principal_point: center
   verticals: plumb              # verified on 00034966: silhouette sides + front-left seam are plumb to 1px
 nominal_pose:
-  yaw_deg: -35
-  pitch_deg: 18
+  yaw_deg: -38                   # both fixtures fit -40 to -41 deg
+  pitch_deg: 14                 # camera elevation; both fixtures fit 9-14 deg
   roll_deg: 0
 fit_bounds:                     # search window around nominal
   yaw_deg: [-12, 12]
-  pitch_deg: [-8, 8]
+  pitch_deg: [-10, 10]
   roll_deg: [-3, 3]
 axis_map:
   front_face: L

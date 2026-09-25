@@ -1,44 +1,50 @@
-# Defaults measured off the approved Trailmate 25 QT image (1154px, scaled to ratios).
+# House template, measured on the approved 70 QT Yukon export (2000x2000), cross-checked
+# against the Trailmate 25. Replace with numbers read from the template PSD once available.
 name: igloo_default
 fonts_dir: fonts
-# House face is Gibson (SemiBold + Regular). Licensed files are not in the repo: drop the
-# .otf/.ttf into fonts/ or list their folder here. Until then Montserrat stands in,
-# sized by cap height, and report.json lists the substitution.
+# House face is Gibson (SemiBold + Regular). The Photoshop script sets real Gibson;
+# previews use Montserrat sized by cap height, flagged in report.json.
 font_search_dirs: []
 font_fallbacks: { Gibson: Montserrat }
-canvas: { w: 2000, h: 2000, bg: "#E1E3E2" }
+canvas: { w: 2000, h: 2000, bg: "#E3E5E2" }
 
 tokens:
-  # cap_ratio = cap height / canvas width, measured on the approved Trailmate 25 image
+  # cap_ratio = cap height / canvas width
   fonts:
-    title:             { family: Gibson, weight: 600, cap_ratio: 0.0300 }
-    label:             { family: Gibson, weight: 600, cap_ratio: 0.0210 }
-    callout_num:       { family: Gibson, weight: 600, cap_ratio: 0.0580, h_scale: 0.65 }  # "38": condensed via horizontal scale
-    callout_word:      { family: Gibson, weight: 600, cap_ratio: 0.0190 }  # "CANS"
-    callout_text:      { family: Gibson, weight: 400, cap_ratio: 0.0170 }  # "INTERIOR DIMENSIONS (L x W x H):"
-    callout_text_bold: { family: Gibson, weight: 600, cap_ratio: 0.0160 }  # "HOLDS UP TO", interior values
-  colors: { line: "#1A1A1A", text: "#111111", callout_text: "#2B2B2B", can_fill: "#B9BCBF" }
-  stroke_ratio: 0.0016            # line weight / canvas width
-  label_gap_capheights: 0.6
+    title:             { family: Gibson, weight: 600, cap_ratio: 0.0320 }
+    label:             { family: Gibson, weight: 600, cap_ratio: 0.0195 }
+    callout_num:       { family: Gibson, weight: 600, cap_ratio: 0.0330 }  # max; shrinks to fit the can
+    callout_word:      { family: Gibson, weight: 600, cap_ratio: 0.0175 }  # "CANS"
+    callout_text:      { family: Gibson, weight: 400, cap_ratio: 0.0160 }  # "INTERIOR DIMENSIONS (L x W x H):"
+    callout_text_bold: { family: Gibson, weight: 600, cap_ratio: 0.0145 }  # "HOLDS UP TO"
+    callout_value:     { family: Gibson, weight: 600, cap_ratio: 0.0175 }  # interior values
+  colors: { line: "#000000", text: "#000000", callout_text: "#000000",
+            can_fill: "#BBBCBE", can_neck: "#A5A6A7", can_tab: "#BDBFC2" }
+  stroke_ratio: 0.0020            # 4px at 2000
+  label_gap_capheights: 0.8       # line stops 0.8 cap from the label
   number_format: "{value:g}”"
 
 layout:
-  title_band: { top: 0.03, height: 0.10 }
-  safe_area: { left: 0.06, right: 0.06, top: 0.15, bottom: 0.12 }
+  title_band: { top: 0.017, height: 0.064 }     # title cap centered at y=0.049
+  safe_area: { left: 0.06, right: 0.06, top: 0.15, bottom: 0.158 }
+  placement: { product_center_x: 0.495, group_bottom: 0.842 }
   reserved_zones:
-    bottom_left:   { x: 0.03, y: 0.82, w: 0.16, h: 0.16 }   # can count
-    bottom_center: { x: 0.28, y: 0.88, w: 0.50, h: 0.08 }   # interior dims
+    cans:     { x: 0.015, y: 0.83, w: 0.145, h: 0.17 }
+    interior: { x: 0.30,  y: 0.90, w: 0.40,  h: 0.06 }
   callouts:
-    cans: bottom_left
-    interior: bottom_center
-  optical_center_target: [0.52, 0.52]
+    cans: cans
+    interior: interior
+  cans:     { center_x: 0.0868, head_cy: 0.844, can_top: 0.866, can_w: 0.0785, num_cy: 0.940, word_cy: 0.978 }
+  interior: { cx: 0.5, l1_cy: 0.916, l2_cy: 0.946 }
+  optical_center_target: [0.50, 0.55]
   legibility_min_cap_px: 36
 
 annotations:
   clearance_ratio: 0.012
-  ticks: none                     # none | ticks | arrows
-  extension_lines: auto           # on | off | auto (searched)
-  height_mode: screen_vertical    # screen_vertical | edge
+  ticks: none
+  extension_lines: "off"
+  height_mode: screen_vertical
+  corner_gap_ratio: 0.055
 
 fit:
   white_threshold: 245
@@ -52,11 +58,11 @@ search:
     offset_ratio: [0.035, 0.10]      # on-screen offset / projected box diagonal
     label_t: [0.35, 0.65]
     height_side: [left, right]
-    group_scale: [0.85, 0.98]
-    group_nudge: [-0.02, 0.02]
-    extension_lines: [false, true]
+    group_scale: [0.94, 1.0]         # 1.0 = group touches the safe area on its limiting side
+    group_nudge: [-0.01, 0.01]
+    extension_lines: [false]
 
-targets:                        # measured on the approved Trailmate 25 image
+targets:
   offset_ratio: 0.06
   fill: 0.85
 
@@ -64,9 +70,9 @@ weights:
   offset_equality: 3.0
   offset_target: 1.0
   label_centering: 0.5
-  whitespace_balance: 2.0
-  optical_center: 1.5
+  whitespace_balance: 0.0         # placement is a template rule now
+  optical_center: 0.0
   fill: 1.0
   height_side_clutter: 1.5
   extension_lines: 0.3
-  style_deviation: 0.0            # enable after style learning
+  style_deviation: 0.0

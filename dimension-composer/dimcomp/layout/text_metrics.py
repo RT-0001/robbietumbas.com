@@ -38,6 +38,7 @@ class TextBox:
     text: str
     face: FontFace  # what is actually measured / rendered
     requested: str  # family asked for by the style
+    requested_weight: int
     postscript: str  # what the PSD should request
     substituted: bool
     size: float  # px (em)
@@ -116,7 +117,7 @@ def measure(text: str, dirs: tuple[str, ...], family: str, weight: int, cap_px: 
     tr = tracking_em * size
     adv = (font.getlength(text) + tr * max(len(text) - 1, 0)) * h_scale
     ps = postscript or (face.postscript if not sub else f"{family}-{WEIGHT_NAMES.get(weight, weight)}")
-    return TextBox(text, face, family, ps, sub, size, adv, face.cap / face.upm * size, tr, h_scale)
+    return TextBox(text, face, family, weight, ps, sub, size, adv, face.cap / face.upm * size, tr, h_scale)
 
 
 def measure_tok(text: str, tok, canvas_w: int, dirs: tuple[str, ...], fallbacks: dict | None = None,

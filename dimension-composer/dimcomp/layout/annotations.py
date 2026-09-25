@@ -74,20 +74,50 @@ def projected_diagonal(fit: FitResult) -> float:
     return float(np.hypot(*np.ptp(uv, axis=0)))
 
 
-def ground_dims(fit: FitResult, profile, dims, target_px: float, extension: bool) -> list[Dim]:
+def ground_dims(fit: FitResult, profile, dims, target_px: float, extension: bool,
+                corner_gap_px: float | None = None) -> list[Dim]:
     box: Box = fit.box
     visible = set(box.visible_faces(fit.pose))
-    out = []
+    lines = []
     for edge_key in profile.visible_bottom_edges:
         face = BOTTOM_EDGE_FACE[edge_key]
         if face not in visible:
             raise HiddenEdgeError(f"profile {profile.name} asks for the {edge_key} bottom edge, "
                                   f"but the {face} face is hidden at the fitted pose")
-        a, b = box.edge(f"bottom_{face}")
+        ename = f"bottom_{face}"
+        a, b = box.edge(ename)
         normal = box.face_normal(face)
         n = normal * solve_offset(fit, a, b, normal, target_px)
-        (p0, p1), (a2, b2) = _proj(fit, [a + n, b + n]), _proj(fit, [a, b])
-        axis = _axis_of_face(face, profile.axis_map)
+        lines.append({"face": face, "verts": EDGES[ename], "a": a, "b": b, "n": n})
+
+    # organized corner: two lines sharing a box corner are extended to their common
+    # virtual corner, then each stops corner_gap_px short of it (symmetric gap)
+    ends = {id(l): [l["a"] + l["n"], l["b"] + l["n"]] for l in lines}
+    trims = {}
+    if corner_gap_px is not None:
+        for i, la in enumerate(lines):
+            for lb in lines[i + 1:]:
+                shared = set(la["verts"]) & set(lb["verts"])
+                if not shared:
+                    continue
+                v = box.vertices[shared.pop()]
+                corner = v + la["n"] + lb["n"]
+                for l in (la, lb):
+                    k = 0 if np.allclose(l["a"], v) else 1
+                    ends[id(l)][k] = corner
+                    trims[(id(l), k)] = corner_gap_px
+
+    out = []
+    for l in lines:
+        p0, p1 = _proj(fit, ends[id(l)])
+        a2, b2 = _proj(fit, [l["a"], l["b"]])
+        for k in (0, 1):
+            if (id(l), k) in trims:
+                end, other = (p0, p1) if k == 0 else (p1, p0)
+                u = (other - end) / np.linalg.norm(other - end)
+                moved = end + u * trims[(id(l), k)]
+                p0, p1 = (moved, p1) if k == 0 else (p0, moved)
+        axis = _axis_of_face(l["face"], profile.axis_map)
         off_px = _perp((a2 + b2) / 2, p0, p1)
         ext = [(a2, p0), (b2, p1)] if extension else []
         out.append(Dim(axis, getattr(dims, axis), p0, p1, off_px, ext))
@@ -134,7 +164,9 @@ def height_dim(fit: FitResult, dims, target_px: float, side: str, mode: str, ext
 
 def build_dims(fit: FitResult, profile, dims, style, offset_ratio: float, height_side: str,
                extension: bool) -> list[Dim]:
-    target_px = offset_ratio * projected_diagonal(fit)
-    out = ground_dims(fit, profile, dims, target_px, extension)
+    diag = projected_diagonal(fit)
+    target_px = offset_ratio * diag
+    gap = style.annotations.corner_gap_ratio
+    out = ground_dims(fit, profile, dims, target_px, extension, None if gap is None else gap * diag)
     out.append(height_dim(fit, dims, target_px, height_side, style.annotations.height_mode, extension))
     return out

@@ -6,7 +6,7 @@ from dimcomp.layout.search import search
 
 
 def test_default_layout_is_clean(ctx):
-    lay = build_layout(ctx, Params())
+    lay = build_layout(ctx, Params(label_t={"L": 0.5, "W": 0.5, "H": 0.4}))
     cost, br = score(ctx, lay)
     assert all(br[k]["raw"] == 0 for k in HARD), br
     # visual offsets: all three lines sit the same on-screen distance from the box

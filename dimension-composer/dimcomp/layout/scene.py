@@ -141,7 +141,8 @@ def text_layer(id_: str, tb: TextBox, x: float, cy: float, fill: str, align="cen
     x0 = x - adv / 2 if align == "center" else x
     layer = {"id": id_, "type": "text", "text": text, "runs": runs,
              "font": {"family": tb.requested, "postscript": tb.postscript, "substituted": tb.substituted,
-                      "render_family": tb.face.family, "weight": tb.face.weight, "file": Path(tb.face.path).name,
+                      "render_family": tb.face.family, "weight": tb.requested_weight,
+                      "render_weight": tb.face.weight, "file": Path(tb.face.path).name,
                       "size": round(tb.size, 2), "tracking_px": round(tb.tracking_px, 2),
                       "h_scale": tb.h_scale, "cap": round(tb.cap, 2)},
              "x": round(x0, 2), "y": round(baseline, 2), "align": "left", "fill": fill,
@@ -160,51 +161,69 @@ def safe_px(style) -> tuple:
 
 # ------------------------------------------------------------------ callouts
 
-CAN_PATH = ("M {x0} {y1} L {x0} {yb} Q {x0} {yt} {x0p} {yt} L {x1p} {yt} Q {x1} {yt} {x1} {yb} "
-            "L {x1} {y1} Q {x1} {yf} {x1p} {yf} L {x0p} {yf} Q {x0} {yf} {x0} {y1} Z")
+def _arc(cx, cy, r, a0, a1, n=6):
+    t = np.linspace(np.radians(a0), np.radians(a1), n)
+    return [(cx + r * np.cos(v), cy + r * np.sin(v)) for v in t]
 
 
-def callout_cans(ctx: Context, zone: tuple) -> tuple[dict, tuple]:
+def _rounded_top_rect(x0, y0, x1, y1, r):
+    """Polygon (y down): rounded top corners, square bottom."""
+    return ([(x0, y1)] + _arc(x0 + r, y0 + r, r, 180, 270) + _arc(x1 - r, y0 + r, r, 270, 360) + [(x1, y1)])
+
+
+def can_polygons(cx: float, top: float, w: float, bottom: float) -> dict[str, list]:
+    """Can silhouette as polygons (vector shapes in Photoshop), proportions from the Yukon export."""
+    tab_w, tab_h = 0.22 * w, 0.21 * w
+    neck_w, neck_h, shoulder_h = 0.873 * w, 0.115 * w, 0.135 * w
+    y_neck = top + tab_h
+    y_sh = y_neck + neck_h
+    y_body = y_sh + shoulder_h
+    return {
+        "tab": _rounded_top_rect(cx - tab_w / 2, top, cx + tab_w / 2, y_neck + 1, tab_w * 0.3),
+        "neck": _rounded_top_rect(cx - neck_w / 2, y_neck, cx + neck_w / 2, y_sh + 1, neck_h * 0.4),
+        "body": [(cx - neck_w / 2, y_sh), (cx + neck_w / 2, y_sh), (cx + w / 2, y_body), (cx + w / 2, bottom),
+                 (cx - w / 2, bottom), (cx - w / 2, y_body)],
+    }
+
+
+def _poly_layer(id_, pts, fill):
+    return {"id": id_, "type": "polygon", "points": [[round(x, 2), round(y, 2)] for x, y in pts], "fill": fill}
+
+
+def callout_cans(ctx: Context) -> tuple[dict, tuple]:
     st = ctx.cfg.style
-    col = st.tokens.colors
-    x0, y0, x1, y1 = zone
-    cx = (x0 + x1) / 2
+    col, g = st.tokens.colors, st.layout.cans
+    cw, ch = st.canvas.w, st.canvas.h
+    cx, can_w = g.center_x * cw, g.can_w * cw
     head = ctx.text("HOLDS UP TO", "callout_text_bold")
-    head_l, head_box = text_layer("cans_head", head, cx, y0 + head.cap / 2, col.callout_text)
+    head_l, head_box = text_layer("cans_head", head, cx, g.head_cy * ch, col.callout_text)
+    tok = st.tokens.fonts.callout_num
     num = ctx.text(str(ctx.cfg.spec.can_count), "callout_num")
+    fit = min(1.0, g.num_fill * can_w / num.advance)
+    if fit < 1.0:  # shrink to fit the can
+        from .text_metrics import measure_tok
+        num = measure_tok(str(ctx.cfg.spec.can_count), tok, cw, ctx.cfg.font_dirs, st.font_fallbacks, scale=fit)
     word = ctx.text("CANS", "callout_word")
-    can_top = head_box[3] + 0.9 * head.cap
-    can_w = max(num.advance, word.advance) * 1.35
-    can_h = y1 - can_top
-    cx0, cx1 = cx - can_w / 2, cx + can_w / 2
-    r = can_w * 0.12
-    tab_w, tab_h = can_w * 0.28, can_h * 0.07
-    body_top = can_top + tab_h
-    path = CAN_PATH.format(x0=cx0, x1=cx1, y1=y1 - r, yb=body_top + r, yt=body_top,
-                           x0p=cx0 + r, x1p=cx1 - r, yf=y1)
-    tab = {"id": "cans_tab", "type": "rect", "x": cx - tab_w / 2, "y": can_top, "w": tab_w,
-           "h": tab_h + r, "rx": tab_h * 0.4, "fill": col.can_fill}
-    body = {"id": "cans_body", "type": "path", "d": path, "fill": col.can_fill}
-    gap = 0.35 * word.cap
-    stack = num.cap + gap + word.cap
-    top = body_top + (y1 - body_top - stack) / 2
-    num_l, _ = text_layer("cans_num", num, cx, top + num.cap / 2, st.tokens.colors.text)
-    word_l, _ = text_layer("cans_word", word, cx, top + num.cap + gap + word.cap / 2, st.tokens.colors.text)
-    group = {"id": "callout_cans", "type": "group", "children": [head_l, tab, body, num_l, word_l]}
-    return group, (min(head_box[0], cx0), y0, max(head_box[2], cx1), y1)
+    bottom = ch + 4 if g.bleed else ch * 0.995
+    polys = can_polygons(cx, g.can_top * ch, can_w, bottom)
+    shapes = [_poly_layer("can_body", polys["body"], col.can_fill),
+              _poly_layer("can_neck", polys["neck"], col.can_neck),
+              _poly_layer("can_tab", polys["tab"], col.can_tab)]
+    num_l, _ = text_layer("cans_num", num, cx, g.num_cy * ch, col.text)
+    word_l, _ = text_layer("cans_word", word, cx, g.word_cy * ch, col.text)
+    group = {"id": "callout_cans", "type": "group", "children": [head_l, *shapes, num_l, word_l]}
+    return group, (min(head_box[0], cx - can_w / 2), head_box[1], max(head_box[2], cx + can_w / 2), bottom)
 
 
-def callout_interior(ctx: Context, zone: tuple) -> tuple[dict, tuple]:
+def callout_interior(ctx: Context) -> tuple[dict, tuple]:
     st = ctx.cfg.style
+    g = st.layout.interior
     d = ctx.cfg.spec.interior_dims_in
-    l1 = ctx.text("INTERIOR DIMENSIONS (L × W × H):", "callout_text")
-    l2 = ctx.text(" × ".join(fmt(v, st) for v in (d.L, d.W, d.H)), "callout_text_bold")
-    x0, y0, x1, y1 = zone
-    cx = (x0 + x1) / 2
-    gap = 0.8 * l1.cap
-    top = (y0 + y1) / 2 - (l1.cap + gap + l2.cap) / 2
-    a, ab = text_layer("interior_label", l1, cx, top + l1.cap / 2, st.tokens.colors.callout_text)
-    b, bb = text_layer("interior_value", l2, cx, top + l1.cap + gap + l2.cap / 2, st.tokens.colors.text)
+    cw, ch = st.canvas.w, st.canvas.h
+    l1 = ctx.text("INTERIOR DIMENSIONS (L \u00d7 W \u00d7 H):", "callout_text")
+    l2 = ctx.text(" \u00d7 ".join(fmt(v, st) for v in (d.L, d.W, d.H)), "callout_value")
+    a, ab = text_layer("interior_label", l1, g.cx * cw, g.l1_cy * ch, st.tokens.colors.callout_text)
+    b, bb = text_layer("interior_value", l2, g.cx * cw, g.l2_cy * ch, st.tokens.colors.text)
     return ({"id": "callout_interior", "type": "group", "children": [a, b]},
             (min(ab[0], bb[0]), ab[1], max(ab[2], bb[2]), bb[3]))
 
@@ -238,14 +257,10 @@ def _static(ctx: Context):
     # callouts
     callouts, callout_boxes = [], {}
     for cid, zone_name in st.layout.callouts.items():
-        zone = st.layout.reserved_zones.get(zone_name)
-        if zone is None:
-            continue
-        z = zone_px(zone, st.canvas)
         if cid == "cans" and cfg.spec.can_count:
-            g, b = callout_cans(ctx, z)
+            g, b = callout_cans(ctx)
         elif cid == "interior" and cfg.spec.interior_dims_in:
-            g, b = callout_interior(ctx, z)
+            g, b = callout_interior(ctx)
         else:
             continue
         g["slot"] = zone_name
@@ -267,13 +282,29 @@ def build_layout(ctx: Context, p: Params) -> Layout:
     sw, sh = sx1 - sx0, sy1 - sy0
     gw, gh = np.ptp(hull_pts[:, 0]), np.ptp(hull_pts[:, 1])
     s = p.group_scale * min(sw / gw, sh / gh)
-    for _ in range(6):
+    pl = st.layout.placement
+    if pl is None:
+        for _ in range(6):
+            lo, hi = _group_bbox(s, hull_pts, dims, labels, p.label_t)
+            bw, bh = hi - lo
+            s *= min(p.group_scale * sw / bw, p.group_scale * sh / bh)
         lo, hi = _group_bbox(s, hull_pts, dims, labels, p.label_t)
-        bw, bh = hi - lo
-        s *= min(p.group_scale * sw / bw, p.group_scale * sh / bh)
-    lo, hi = _group_bbox(s, hull_pts, dims, labels, p.label_t)
-    center = np.array([(sx0 + sx1) / 2 + p.nudge[0] * cw, (sy0 + sy1) / 2 + p.nudge[1] * ch])
-    T = center - (lo + hi) / 2
+        center = np.array([(sx0 + sx1) / 2 + p.nudge[0] * cw, (sy0 + sy1) / 2 + p.nudge[1] * ch])
+        T = center - (lo + hi) / 2
+    else:
+        # template rule: product bbox centered at product_center_x, group bottom on group_bottom;
+        # scale is the largest that keeps the group inside the safe area on every side
+        hx = (hull_pts[:, 0].min() + hull_pts[:, 0].max()) / 2
+        ax = (pl.product_center_x + p.nudge[0]) * cw
+        ay = pl.group_bottom * ch
+        for _ in range(8):
+            lo, hi = _group_bbox(s, hull_pts, dims, labels, p.label_t)
+            px = s * hx
+            need = np.array([px - lo[0], hi[0] - px, hi[1] - lo[1]])
+            room = np.array([ax - sx0, sx1 - ax, ay - sy0])
+            s *= p.group_scale * float(np.min(room / np.maximum(need, 1e-9)))
+        lo, hi = _group_bbox(s, hull_pts, dims, labels, p.label_t)
+        T = np.array([ax - s * hx, ay - hi[1]])
     group_bbox = (*(lo + T), *(hi + T))
 
     def C(pt):
@@ -298,6 +329,13 @@ def build_layout(ctx: Context, p: Params) -> Layout:
     return Layout(p, s, T, placed, hull_c, contour_c, group_bbox, title_box, callout_boxes, scene)
 
 
+def _alpha_bbox(ctx: Context, img_scale: float, T) -> list:
+    if "alpha_bbox" not in ctx.cache:
+        ctx.cache["alpha_bbox"] = ctx.photo.getchannel("A").point(lambda v: 255 if v > 0 else 0).getbbox()
+    x0, y0, x1, y1 = ctx.cache["alpha_bbox"]
+    return _r([x0 * img_scale + T[0], y0 * img_scale + T[1], x1 * img_scale + T[0], y1 * img_scale + T[1]])
+
+
 def _r(v):
     return [round(float(x), 2) for x in v]
 
@@ -308,9 +346,12 @@ def _scene(ctx: Context, p: Params, s, T, placed: list[PlacedDim], title_l, call
     stroke = st.tokens.stroke_ratio * cw
     img_scale = s * ctx.work_scale
     layers = [title_l, {
-        "id": "product", "type": "image", "src": ctx.photo_src,
+        "id": "product", "type": "image", "src": ctx.photo_src, "src_name": Path(ctx.photo_src).name,
         "size": [ctx.photo.width, ctx.photo.height],
         "transform": {"scale": round(img_scale, 6), "tx": round(float(T[0]), 2), "ty": round(float(T[1]), 2)},
+        # where the product's visible pixels land on the canvas; the Photoshop script scales the
+        # full-res TIFF to this box, so the layout photo can be any smaller copy of it
+        "alpha_bbox": _alpha_bbox(ctx, img_scale, T),
     }]
     for d in placed:
         lab, _ = text_layer(f"dim_{d.dim.axis}_label", d.label, d.anchor[0], d.anchor[1], st.tokens.colors.text)
@@ -321,6 +362,7 @@ def _scene(ctx: Context, p: Params, s, T, placed: list[PlacedDim], title_l, call
             "extension": [[_r(a), _r(b)] for a, b in d.extension],
             "ticks": st.annotations.ticks, "tick_len": round(st.annotations.tick_len_ratio * cw, 2),
             "stroke": round(stroke, 2), "color": st.tokens.colors.line,
+            "gap": round(st.tokens.label_gap_capheights * d.label.cap, 2),
             "label": lab,
         })
     layers += callouts

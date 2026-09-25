@@ -110,8 +110,9 @@ class FontTok(Strict):
 class Fonts(Strict):
     title: FontTok
     label: FontTok
-    callout_num: FontTok
+    callout_num: FontTok  # cap_ratio is the MAX; shrinks to fit the can
     callout_word: FontTok
+    callout_value: FontTok
     callout_text: FontTok
     callout_text_bold: FontTok
 
@@ -120,7 +121,9 @@ class Colors(Strict):
     line: str = "#1A1A1A"
     text: str = "#111111"
     callout_text: str = "#333333"
-    can_fill: str = "#B9BCBF"
+    can_fill: str = "#BBBCBE"
+    can_neck: str = "#A5A6A7"
+    can_tab: str = "#BDBFC2"
 
 
 class Tokens(Strict):
@@ -156,6 +159,29 @@ class Canvas(Strict):
     bg: str = "#E9EAEC"
 
 
+class Placement(Strict):
+    """Template rule seen in every approved image: product centered, group bottom on a fixed line."""
+    product_center_x: float = 0.495
+    group_bottom: float = 0.842
+
+
+class CansGeom(Strict):
+    center_x: float = 0.0868
+    head_cy: float = 0.844  # "HOLDS UP TO" cap center
+    can_top: float = 0.866  # top of the pull tab
+    can_w: float = 0.0785
+    num_cy: float = 0.940
+    word_cy: float = 0.978
+    num_fill: float = 0.85  # number width <= this x can width
+    bleed: bool = True  # can runs off the bottom edge
+
+
+class InteriorGeom(Strict):
+    cx: float = 0.5
+    l1_cy: float = 0.916
+    l2_cy: float = 0.946
+
+
 class Layout(Strict):
     title_band: Band
     safe_area: Margins
@@ -163,6 +189,9 @@ class Layout(Strict):
     optical_center_target: tuple[float, float] = (0.5, 0.53)
     legibility_min_cap_px: float = 36
     callouts: dict[str, str] = Field(default_factory=dict)  # callout id -> reserved zone
+    placement: Placement | None = None  # None: center the group in the safe area
+    cans: CansGeom = CansGeom()
+    interior: InteriorGeom = InteriorGeom()
 
 
 class Annotations(Strict):
@@ -173,6 +202,9 @@ class Annotations(Strict):
     # "screen_vertical": H is drawn plumb, spanning the projected box end on that side
     #   (what hand-made Amazon images do). "edge": the projected 3D vertical edge.
     height_mode: Literal["screen_vertical", "edge"] = "screen_vertical"
+    # W and L lines stop short of their shared virtual corner by this much each
+    # (fraction of projected box diagonal). None: each line ends at its own box corner.
+    corner_gap_ratio: float | None = 0.055
 
 
 class FitCfg(Strict):
@@ -192,6 +224,15 @@ class FitCfg(Strict):
     w_corners: float = 0.01  # per (0.5%-of-long-edge px)^2
     max_line_deg: float = 1.0
     hull_tolerance_px: float = 1.5  # at 2000px long edge
+    # handles / wire bails / thin protrusions are opened away before fitting angles
+    core_open_ratio: float = 0.05  # opening kernel diameter / silhouette bbox diagonal
+    body_aspect_free: bool = True
+    body_aspect_bounds: tuple[float, float] = (0.6, 1.15)  # body L, W vs spec
+    w_aspect_prior: float = 0.005  # a 10% proportion change costs about as much as 0.5% excess
+    auto_lines: bool = True  # detect straight product edges and use them as line evidence
+    auto_line_min_len: float = 0.08  # of image diagonal
+    auto_line_max_deg: float = 6.0
+    dims_include_protrusions: bool = False  # False: lines hug the body box; True: spec box swallows handles
     max_corner_px: float = 8.0  # at 2000px long edge
 
 
