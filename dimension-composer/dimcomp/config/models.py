@@ -166,6 +166,7 @@ class Placement(Strict):
 
 
 class CansGeom(Strict):
+    asset: str | None = None  # can artwork (PNG, from the template PSD); None draws a vector can
     center_x: float = 0.0868
     head_cy: float = 0.844  # "HOLDS UP TO" cap center
     can_top: float = 0.866  # top of the pull tab
@@ -201,10 +202,16 @@ class Annotations(Strict):
     extension_lines: Literal["on", "off", "auto"] = "auto"
     # "screen_vertical": H is drawn plumb, spanning the projected box end on that side
     #   (what hand-made Amazon images do). "edge": the projected 3D vertical edge.
-    height_mode: Literal["screen_vertical", "edge"] = "screen_vertical"
+    # silhouette: plumb line spanning the product's visible end (designer's way);
+    # screen_vertical: plumb, spanning the projected box end; edge: the projected 3D edge
+    height_mode: Literal["silhouette", "screen_vertical", "edge"] = "silhouette"
     # W and L lines stop short of their shared virtual corner by this much each
     # (fraction of projected box diagonal). None: each line ends at its own box corner.
     corner_gap_ratio: float | None = 0.055
+    # screen: edge slid perpendicular on screen (how designers draw it; line spans the edge).
+    # ground: edge pushed out along the floor in 3D (drifts sideways under perspective).
+    offset_mode: Literal["screen", "ground"] = "screen"
+    hang_inch_mark: bool = True  # on the plumb H line, center the numerals and let ” hang
 
 
 class FitCfg(Strict):

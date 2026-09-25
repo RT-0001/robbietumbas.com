@@ -1,26 +1,27 @@
-# House template, measured on the approved 70 QT Yukon export (2000x2000), cross-checked
-# against the Trailmate 25. Replace with numbers read from the template PSD once available.
+# House template. Values read from the template PSD ("dims example.psd", 4000x4000 artboard):
+# Gibson-SemiBold/Regular, sizes = FontSize x transform scale, black, tracking 0, 9px lines.
+# cap_ratio = PSD font size / 4000 x 0.712 (Gibson cap height / em, measured on its layers).
 name: igloo_default
 fonts_dir: fonts
 # House face is Gibson (SemiBold + Regular). The Photoshop script sets real Gibson;
 # previews use Montserrat sized by cap height, flagged in report.json.
 font_search_dirs: []
 font_fallbacks: { Gibson: Montserrat }
-canvas: { w: 2000, h: 2000, bg: "#E3E5E2" }
+canvas: { w: 2000, h: 2000, bg: "#E3E5E3" }
 
 tokens:
   # cap_ratio = cap height / canvas width
   fonts:
-    title:             { family: Gibson, weight: 600, cap_ratio: 0.0320 }
-    label:             { family: Gibson, weight: 600, cap_ratio: 0.0195 }
-    callout_num:       { family: Gibson, weight: 600, cap_ratio: 0.0330 }  # max; shrinks to fit the can
-    callout_word:      { family: Gibson, weight: 600, cap_ratio: 0.0175 }  # "CANS"
-    callout_text:      { family: Gibson, weight: 400, cap_ratio: 0.0160 }  # "INTERIOR DIMENSIONS (L x W x H):"
-    callout_text_bold: { family: Gibson, weight: 600, cap_ratio: 0.0145 }  # "HOLDS UP TO"
-    callout_value:     { family: Gibson, weight: 600, cap_ratio: 0.0175 }  # interior values
+    title:             { family: Gibson, weight: 600, cap_ratio: 0.03243 }  # 182.2px @4000
+    label:             { family: Gibson, weight: 600, cap_ratio: 0.02058 }  # 115.6px
+    callout_num:       { family: Gibson, weight: 600, cap_ratio: 0.03453 }  # 194px "112"; shrinks to fit the can
+    callout_word:      { family: Gibson, weight: 600, cap_ratio: 0.0175 }   # unused while the can asset carries "CANS"
+    callout_text:      { family: Gibson, weight: 400, cap_ratio: 0.01695 }  # 95.2px "INTERIOR DIMENSIONS (L x W x H):"
+    callout_text_bold: { family: Gibson, weight: 600, cap_ratio: 0.01544 }  # 86.7px "HOLDS UP TO"
+    callout_value:     { family: Gibson, weight: 600, cap_ratio: 0.01819 }  # 102.2px interior values
   colors: { line: "#000000", text: "#000000", callout_text: "#000000",
             can_fill: "#BBBCBE", can_neck: "#A5A6A7", can_tab: "#BDBFC2" }
-  stroke_ratio: 0.0020            # 4px at 2000
+  stroke_ratio: 0.00225           # 9px at 4000
   label_gap_capheights: 0.8       # line stops 0.8 cap from the label
   number_format: "{value:g}”"
 
@@ -34,7 +35,7 @@ layout:
   callouts:
     cans: cans
     interior: interior
-  cans:     { center_x: 0.0868, head_cy: 0.844, can_top: 0.866, can_w: 0.0785, num_cy: 0.940, word_cy: 0.978 }
+  cans:     { asset: assets/can.png, center_x: 0.0870, head_cy: 0.844, can_top: 0.86525, can_w: 0.0795, num_cy: 0.940 }
   interior: { cx: 0.5, l1_cy: 0.916, l2_cy: 0.946 }
   optical_center_target: [0.50, 0.55]
   legibility_min_cap_px: 36
@@ -43,7 +44,8 @@ annotations:
   clearance_ratio: 0.012
   ticks: none
   extension_lines: "off"
-  height_mode: screen_vertical
+  height_mode: silhouette        # plumb, spanning the product's visible end
+  offset_mode: screen             # edges slid straight out on screen (lines span the edges)
   corner_gap_ratio: 0.055
 
 fit:

@@ -73,7 +73,17 @@ function addText(doc, parent, spec, cx, cy, capPx, opts) {
     t.justification = Justification.CENTER;
     t.position = [cx, cy + capPx / 2];            // point text: position is on the baseline
     var b = bnds(l);
-    l.translate((cx - (b[0] + b[2]) / 2), 0);    // exact horizontal centering on real glyphs
+    if (opts.hangX !== undefined) {
+        // center only the numerals on hangX; the trailing inch mark hangs outside
+        var digits = String(t.contents).replace(/[\u201d\u2033"']+$/, "");
+        var tmp = parent.artLayers.add(); tmp.kind = LayerKind.TEXT;
+        tmp.textItem.contents = digits; tmp.textItem.font = ps; tmp.textItem.size = new UnitValue(size, "px");
+        tmp.textItem.position = [0, size * 2];
+        var tb = bnds(tmp); tmp.remove();
+        l.translate(opts.hangX - (tb[2] - tb[0]) / 2 - b[0], 0);
+    } else {
+        l.translate((cx - (b[0] + b[2]) / 2), 0);    // exact horizontal centering on real glyphs
+    }
     return l;
 }
 
@@ -204,37 +214,62 @@ function splitLine(p0, p1, box, gap) {
 
 function inGroup(layer, grp) { try { layer.move(grp, ElementPlacement.PLACEATEND); } catch (e) {} }
 
-// ---- product --------------------------------------------------------------
-function placeProduct(doc, spec) {
-    STEP = "open product TIFF";
-    var folder = File($.fileName).parent;
-    var f = new File(folder + "/" + spec.src_name);
-    if (!f.exists) {
-        f = File.openDialog("Select the product photo (" + spec.src_name + ")");
-        if (!f) throw new Error("no product photo selected");
+// ---- images ---------------------------------------------------------------
+function b64decode(str) {
+    var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    var out = [], buf = 0, bits = 0;
+    for (var i = 0; i < str.length; i++) {
+        var c = str.charAt(i);
+        if (c === "=") break;
+        var v = chars.indexOf(c);
+        if (v < 0) continue;
+        buf = ((buf << 6) | v) & 0xFFFFFF; bits += 6;
+        if (bits >= 8) { bits -= 8; out.push(String.fromCharCode((buf >> bits) & 255)); }
     }
+    return out.join("");
+}
+
+function assetFile(name) {
+    var f = new File(Folder.temp + "/dimcomp_" + name);
+    f.encoding = "BINARY";
+    f.open("w"); f.write(b64decode(DATA.assets[name])); f.close();
+    return f;
+}
+
+// Open an image, copy its (merged) layer into doc as a smart object named `name`,
+// and fit its visible pixels to target [x0, y0, x1, y1].
+function placeImage(doc, f, target, name, checkAspect) {
     var src = app.open(f);
     if (src.layers.length > 1) src.mergeVisibleLayers();
     var srcLayer = src.activeLayer;
-    if (srcLayer.isBackgroundLayer) WARN.push("product photo has no transparency; it will cover the background");
-    STEP = "copy product into canvas";
+    if (srcLayer.isBackgroundLayer) WARN.push(name + ": image has no transparency; it will cover the background");
     var lay = srcLayer.duplicate(doc, ElementPlacement.PLACEATBEGINNING);
     src.close(SaveOptions.DONOTSAVECHANGES);
     app.activeDocument = doc;
     doc.activeLayer = lay;
     try { executeAction(stringIDToTypeID("newPlacedLayer"), undefined, DialogModes.NO); lay = doc.activeLayer; }
-    catch (e) { WARN.push("product kept as pixels (smart object conversion failed)"); }
-    lay.name = "product";
-    STEP = "scale product";
-    var t = spec.alpha_bbox, b = bnds(lay);
-    var sx = (t[2] - t[0]) / (b[2] - b[0]), sy = (t[3] - t[1]) / (b[3] - b[1]);
-    if (Math.abs(sx / sy - 1) > 0.02)
-        WARN.push("product photo proportions differ from the layout photo by " + Math.round(Math.abs(sx / sy - 1) * 100) +
+    catch (e) { WARN.push(name + " kept as pixels (smart object conversion failed)"); }
+    lay.name = name;
+    var b = bnds(lay);
+    var sx = (target[2] - target[0]) / (b[2] - b[0]), sy = (target[3] - target[1]) / (b[3] - b[1]);
+    if (checkAspect && Math.abs(sx / sy - 1) > 0.02)
+        WARN.push(name + " proportions differ from the layout photo by " + Math.round(Math.abs(sx / sy - 1) * 100) +
                   "% - is it the same cutout?");
     lay.resize(sx * 100, sx * 100, AnchorPosition.TOPLEFT);
     b = bnds(lay);
-    lay.translate(t[0] - b[0], t[1] - b[1]);
+    lay.translate(target[0] - b[0], target[1] - b[1]);
     return lay;
+}
+
+function placeProduct(doc, spec) {
+    STEP = "open product photo";
+    var f = new File(File($.fileName).parent + "/" + spec.src_name);
+    if (!f.exists) {
+        f = File.openDialog("Select the product photo (" + spec.src_name + ")");
+        if (!f) throw new Error("no product photo selected");
+    }
+    STEP = "place product";
+    return placeImage(doc, f, spec.alpha_bbox, "product", true);
 }
 
 // ---- main -----------------------------------------------------------------
@@ -261,11 +296,17 @@ function build() {
         for (j = 0; j < kids.length; j++) {
             var k = kids[j];
             if (k.type === "text") { var c = cxcy(k.box); addText(doc, g, k, c[0], c[1], c[2]); }
-            else if (k.type === "polygon") shapes.push(k);
+            else if (k.type === "polygon" || k.type === "image") shapes.push(k);
         }
         for (j = shapes.length - 1; j >= 0; j--) {      // shapes under the text, first listed lowest
             doc.activeLayer = g.layers[0];
-            var s = addShape(doc, [shapes[j].points], shapes[j].fill, shapes[j].id);
+            var s;
+            if (shapes[j].type === "image") {
+                STEP = "place " + shapes[j].id;
+                s = placeImage(doc, assetFile(shapes[j].src_name), shapes[j].alpha_bbox, shapes[j].id, false);
+            } else {
+                s = addShape(doc, [shapes[j].points], shapes[j].fill, shapes[j].id);
+            }
             inGroup(s, g);
         }
     }
@@ -278,7 +319,8 @@ function build() {
         STEP = "dimension " + d.axis;
         var dg = dims.layerSets.add(); dg.name = d.id;
         var c2 = cxcy(d.label.box);
-        var lab = addText(doc, dg, d.label, c2[0], c2[1], c2[2], { name: d.id + "_label" });
+        var lab = addText(doc, dg, d.label, c2[0], c2[1], c2[2],
+                          { name: d.id + "_label", hangX: d.label.hang_x });
         var segs = splitLine(d.line[0], d.line[1], bnds(lab), d.gap);
         doc.activeLayer = lab;
         var sh = addShape(doc, lineQuads(segs, d.stroke), d.color, d.id + "_line");

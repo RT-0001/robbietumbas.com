@@ -42,3 +42,24 @@ def test_search_top3(ctx):
     assert [c.cost for c in top] == sorted(c.cost for c in top)
     assert all(sum(c.breakdown[k]["weighted"] for k in HARD) == 0 for c in top)
     assert top[0].params.height_side == "right"
+
+
+def test_lines_follow_template_psd(root):
+    """Yukon lines vs the designer's lines in the template PSD (4000px, halved)."""
+    from dimcomp.config import resolve
+    from dimcomp.pipeline import load_context
+    c = load_context(resolve(root / "specs" / "yukon70.json"))
+    lay = build_layout(c, Params(offset_ratio=0.06, group_scale=1.0, label_t={"L": 0.567, "W": 0.524, "H": 0.466}))
+    psd = {"W": ((360.3, 3032.5), (1246.6, 3342.8)), "L": ((1614.6, 3364.6), (3441.1, 3018.6)),
+           "H": ((3593, 2777.2), (3593, 1124.2))}
+    for d in lay.dims:
+        p = np.array(psd[d.dim.axis]) / 2
+        a, b = d.p0, d.p1
+        if np.linalg.norm(a - p[0]) > np.linalg.norm(b - p[0]):
+            a, b = b, a
+        u, v = (b - a) / np.linalg.norm(b - a), (p[1] - p[0]) / np.linalg.norm(p[1] - p[0])
+        assert np.degrees(np.arccos(np.clip(u @ v, -1, 1))) < 5.0, d.dim.axis  # same direction
+        assert np.linalg.norm(b - p[1]) < 60, d.dim.axis  # far/near ends land near the designer's
+    ids = [l["id"] for l in lay.scene["layers"]]
+    h = next(l for l in lay.scene["layers"] if l["id"] == "dim_H")
+    assert "hang_x" in h["label"]  # numerals centered on the plumb line

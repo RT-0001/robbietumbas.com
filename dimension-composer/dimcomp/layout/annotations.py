@@ -124,13 +124,80 @@ def ground_dims(fit: FitResult, profile, dims, target_px: float, extension: bool
     return out
 
 
+def _line_intersect(p, u, q, v):
+    """Intersection of 2D lines p + s*u and q + t*v (None if parallel)."""
+    den = u[0] * v[1] - u[1] * v[0]
+    if abs(den) < 1e-9:
+        return None
+    s = ((q[0] - p[0]) * v[1] - (q[1] - p[1]) * v[0]) / den
+    return p + s * u
+
+
+def screen_dims(fit: FitResult, profile, dims, target_px: float, extension: bool,
+                corner_gap_px: float | None = None, sil=None) -> list[Dim]:
+    """How a designer draws them: each visible bottom edge, projected, then slid straight out
+    (perpendicular on screen, away from the product) by target_px. The line keeps the edge's
+    perspective angle and length; its ends sit square to the product's corners."""
+    box: Box = fit.box
+    visible = set(box.visible_faces(fit.pose))
+    uv = box.project(fit.pose, fit.K)
+    center = np.mean(list(uv.values()), axis=0)
+    lines = []
+    for edge_key in profile.visible_bottom_edges:
+        face = BOTTOM_EDGE_FACE[edge_key]
+        if face not in visible:
+            raise HiddenEdgeError(f"profile {profile.name} asks for the {edge_key} bottom edge, "
+                                  f"but the {face} face is hidden at the fitted pose")
+        va, vb = EDGES[f"bottom_{face}"]
+        a2, b2 = uv[va], uv[vb]
+        u = (b2 - a2) / np.linalg.norm(b2 - a2)
+        n = np.array([-u[1], u[0]])
+        if np.dot(n, (a2 + b2) / 2 - center) < 0:
+            n = -n
+        # distance is measured from the product OUTLINE (what the eye sees), not the box edge,
+        # which floats off rounded corners
+        off = target_px
+        if sil is not None:
+            pts = np.asarray(sil.contour.exterior.coords)
+            t = (pts - a2) @ u
+            span = pts[(t >= 0) & (t <= np.linalg.norm(b2 - a2))]
+            if len(span):
+                off = float(((span - a2) @ n).max()) + target_px
+        lines.append({"face": face, "verts": (va, vb), "e": [a2, b2], "p": [a2 + n * off, b2 + n * off], "u": u})
+
+    if corner_gap_px is not None:
+        for i, la in enumerate(lines):
+            for lb in lines[i + 1:]:
+                shared = set(la["verts"]) & set(lb["verts"])
+                if not shared:
+                    continue
+                v = shared.pop()
+                x = _line_intersect(la["p"][0], la["u"], lb["p"][0], lb["u"])
+                if x is None:
+                    continue
+                for l in (la, lb):
+                    k = l["verts"].index(v)
+                    other = l["p"][1 - k]
+                    d = (other - x) / np.linalg.norm(other - x)
+                    l["p"][k] = x + d * corner_gap_px
+
+    out = []
+    for l in lines:
+        p0, p1 = l["p"]
+        axis = _axis_of_face(l["face"], profile.axis_map)
+        ext = [(l["e"][0], p0), (l["e"][1], p1)] if extension else []
+        out.append(Dim(axis, getattr(dims, axis), p0, p1, target_px, ext))
+    return out
+
+
 def silhouette_edges(fit: FitResult) -> dict[str, str]:
     """Which vertical box edge forms the left / right image silhouette."""
     xs = {e: float(_proj(fit, fit.box.edge(e)[0])[0, 0]) for e in VERTICAL_EDGES}
     return {"left": min(xs, key=xs.get), "right": max(xs, key=xs.get)}
 
 
-def height_dim(fit: FitResult, dims, target_px: float, side: str, mode: str, extension: bool) -> Dim:
+def height_dim(fit: FitResult, dims, target_px: float, side: str, mode: str, extension: bool,
+               sil=None, band: float = 0.06) -> Dim:
     box = fit.box
     edge = silhouette_edges(fit)[side]
     bottom, top = box.edge(edge)
@@ -144,6 +211,21 @@ def height_dim(fit: FitResult, dims, target_px: float, side: str, mode: str, ext
         return Dim("H", dims.H, p0, p1, _perp((b2 + t2) / 2, p0, p1), ext, side)
 
     off_px = target_px
+
+    if mode == "silhouette" and sil is not None:
+        # plumb line spanning the product's VISIBLE end on this side (what a designer traces),
+        # set out from the outline's extreme point
+        pts = np.asarray(sil.contour.exterior.coords)
+        x0, x1 = pts[:, 0].min(), pts[:, 0].max()
+        w = x1 - x0
+        sel = pts[:, 0] >= x1 - band * w if side == "right" else pts[:, 0] <= x0 + band * w
+        y_top, y_bot = pts[sel, 1].min(), pts[sel, 1].max()
+        x = x1 + off_px if side == "right" else x0 - off_px
+        p0, p1 = np.array([x, y_bot]), np.array([x, y_top])
+        ext = []
+        if extension:
+            ext = [(pts[sel][np.argmax(pts[sel, 1])], p0), (pts[sel][np.argmin(pts[sel, 1])], p1)]
+        return Dim("H", dims.H, p0, p1, off_px, ext, side)
 
     # screen_vertical: plumb line beside the box end on this side, spanning that end's projection
     uv = box.project(fit.pose, fit.K)
@@ -163,10 +245,14 @@ def height_dim(fit: FitResult, dims, target_px: float, side: str, mode: str, ext
 
 
 def build_dims(fit: FitResult, profile, dims, style, offset_ratio: float, height_side: str,
-               extension: bool) -> list[Dim]:
+               extension: bool, sil=None) -> list[Dim]:
     diag = projected_diagonal(fit)
     target_px = offset_ratio * diag
     gap = style.annotations.corner_gap_ratio
-    out = ground_dims(fit, profile, dims, target_px, extension, None if gap is None else gap * diag)
-    out.append(height_dim(fit, dims, target_px, height_side, style.annotations.height_mode, extension))
+    gap_px = None if gap is None else gap * diag
+    if style.annotations.offset_mode == "screen":
+        out = screen_dims(fit, profile, dims, target_px, extension, gap_px, sil)
+    else:
+        out = ground_dims(fit, profile, dims, target_px, extension, gap_px)
+    out.append(height_dim(fit, dims, target_px, height_side, style.annotations.height_mode, extension, sil))
     return out

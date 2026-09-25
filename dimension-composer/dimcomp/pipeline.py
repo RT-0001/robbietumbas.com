@@ -71,7 +71,8 @@ def write_layout(ctx: Context, lay: Layout, out_dir: Path, name: str, png: bool 
     (out_dir / f"{name}.svg").write_text(svg)
     files = {"scene": f"{name}.scene.json", "svg": f"{name}.svg"}
     jsx_name = f"{ctx.cfg.spec.sku}_{name}.jsx"
-    (out_dir / jsx_name).write_text(to_jsx(lay.scene, f"{ctx.cfg.spec.sku}_dimensions_{name.split('_')[-1]}"))
+    (out_dir / jsx_name).write_text(to_jsx(lay.scene, f"{ctx.cfg.spec.sku}_dimensions_{name.split('_')[-1]}",
+                                           ctx.cfg.root))
     files["jsx"] = jsx_name
     if png:
         dirs = {str(Path(t.face.path).parent) for t in _faces(ctx)} | set(ctx.cfg.font_dirs)

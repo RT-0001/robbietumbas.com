@@ -24,15 +24,17 @@ pytest -q                                          # 30 tests; the .jsx is execu
 
 ## Template (styles/igloo_default.yaml)
 
-The template is measured on the approved **70 QT Yukon** export (2000²), which is the current template, and cross-checked against the Trailmate 25:
+Values come from the template PSD (`tests/fixtures/template_yukon70.psd`, a 4000² artboard): `Gibson-SemiBold`/`Gibson-Regular`, sizes = FontSize × layer transform, black, tracking 0, 9px lines, and the can artwork (`assets/can.png`, which carries "CANS"). The Photoshop script embeds the can artwork. In detail:
 - **Title:** Gibson SemiBold, cap height 0.032 of the canvas, centered at y 0.049.
-- **Labels:** Gibson SemiBold, cap height 0.0195. Lines are 4px black, stopping 0.8 cap-heights short of the label.
+- **Labels:** Gibson SemiBold, 115.6px at 4000. Lines are 9px black, each one continuous line with a gap centered on its label. On the plumb H line, the numerals are centered on the line and the inch mark hangs outside.
 - **Placement rule** (both approved images agree): the product is centered horizontally, and the bottom of the product-and-dims group sits at y **0.842**, just above the callout row. Scale is the largest that fits the safe area.
 - **Corner:** the W and L lines are extended to their shared corner, then each stops the same distance short of it (`corner_gap_ratio`), so the gap is symmetric and deliberate.
-- **Can callout:** positions and shape proportions are taken from the Yukon, and the can bleeds off the bottom edge. The can count shrinks to fit the can.
+- **Can callout:** the template's can artwork, bleeding off the bottom edge. "112" is Gibson SemiBold at 194px at normal width; the count shrinks to fit the can.
 - **Interior dims:** centered, "INTERIOR DIMENSIONS…" in Regular and the values in SemiBold.
 
-**These numbers are measured off exports.** Once the template PSD is available, its layer data should replace them.
+**How the lines are drawn** (matched to the template PSD; the mean endpoint error vs the designer's lines is about 32px at 2000²):
+- **L and W:** the product's bottom edges, slid straight out on screen by a fixed visual distance measured from the product outline. Each line keeps the edge's perspective angle and length, and its ends sit square to the corners. (Pushing them out along the floor in 3D made them drift sideways past the product.)
+- **H:** a plumb line spanning the product's visible end, set out from the outline's extreme point, on the end away from the visible side face.
 
 ## How the fit works (and why it differs from the plan)
 

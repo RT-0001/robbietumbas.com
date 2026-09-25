@@ -110,9 +110,14 @@ function File(p) { if (!(this instanceof File)) return new File(p); this.fsName 
 Object.defineProperty(File.prototype, "exists", { get() { return /\.(tif|tiff|png)$/.test(this.name); } });
 Object.defineProperty(File.prototype, "parent", { get() { return "/work"; } });
 File.openDialog = () => null;
+File.prototype.open = function () { this._buf = ""; return true; };
+File.prototype.write = function (s) { this._buf += s; };
+File.prototype.close = function () { written[this.name] = this._buf; };
+const written = {};
+const Folder = { temp: "/tmp" };
 
 const ctx = {
-  app, UnitValue, SolidColor, PathPointInfo, SubPathInfo, ActionDescriptor, ActionReference, File,
+  app, UnitValue, SolidColor, PathPointInfo, SubPathInfo, ActionDescriptor, ActionReference, File, Folder,
   executeAction, charIDToTypeID: (s) => s, stringIDToTypeID: (s) => s,
   alert: (m) => alerts.push(String(m)), $: { fileName: "/work/script.jsx" },
   Units: { PIXELS: "PX" }, TypeUnits: { PIXELS: "PX" }, LayerKind: { TEXT: "TEXT", NORMAL: "NORMAL" },
@@ -136,4 +141,6 @@ function tree(node) {
         subpaths: l.subpaths });
 }
 const doc = app.documents[app.documents.length - 1];
-process.stdout.write(JSON.stringify({ alerts, saved, tree: tree(doc), prefs: app.preferences }, null, 1));
+const assetsWritten = {};
+for (const k of Object.keys(written)) assetsWritten[k] = Buffer.from(written[k], "latin1").toString("base64");
+process.stdout.write(JSON.stringify({ alerts, saved, tree: tree(doc), prefs: app.preferences, assetsWritten }, null, 1));

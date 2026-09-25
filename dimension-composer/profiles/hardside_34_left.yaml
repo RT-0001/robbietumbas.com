@@ -20,6 +20,6 @@ axis_map:
   front_face: L
   side_face: W
 visible_bottom_edges: [front, left_side]
-height_edge_candidates: [left_silhouette, right_silhouette]
+height_edge_candidates: [right_silhouette]   # H goes on the end away from the visible side face (both approved images)
 expected_excess: [0.02, 0.30]
 style_overrides: {}

@@ -203,15 +203,29 @@ def callout_cans(ctx: Context) -> tuple[dict, tuple]:
     if fit < 1.0:  # shrink to fit the can
         from .text_metrics import measure_tok
         num = measure_tok(str(ctx.cfg.spec.can_count), tok, cw, ctx.cfg.font_dirs, st.font_fallbacks, scale=fit)
-    word = ctx.text("CANS", "callout_word")
-    bottom = ch + 4 if g.bleed else ch * 0.995
-    polys = can_polygons(cx, g.can_top * ch, can_w, bottom)
-    shapes = [_poly_layer("can_body", polys["body"], col.can_fill),
-              _poly_layer("can_neck", polys["neck"], col.can_neck),
-              _poly_layer("can_tab", polys["tab"], col.can_tab)]
     num_l, _ = text_layer("cans_num", num, cx, g.num_cy * ch, col.text)
-    word_l, _ = text_layer("cans_word", word, cx, g.word_cy * ch, col.text)
-    group = {"id": "callout_cans", "type": "group", "children": [head_l, *shapes, num_l, word_l]}
+    if g.asset:
+        # the template's own can artwork (it carries "CANS"); placed by its visible-pixel box
+        from PIL import Image
+        art = Image.open(ctx.cfg.root / g.asset).convert("RGBA")
+        scale = can_w / art.width
+        x0, y0 = cx - can_w / 2, g.can_top * ch
+        can = {"id": "can", "type": "image", "src": g.asset, "src_name": Path(g.asset).name,
+               "size": [art.width, art.height], "asset": True,
+               "transform": {"scale": round(scale, 6), "tx": round(x0, 2), "ty": round(y0, 2)},
+               "alpha_bbox": _r([v * scale + o for v, o in zip(art.getchannel("A").getbbox(), (x0, y0, x0, y0))])}
+        children = [head_l, can, num_l]
+        bottom = y0 + art.height * scale
+    else:
+        word = ctx.text("CANS", "callout_word")
+        bottom = ch + 4 if g.bleed else ch * 0.995
+        polys = can_polygons(cx, g.can_top * ch, can_w, bottom)
+        shapes = [_poly_layer("can_body", polys["body"], col.can_fill),
+                  _poly_layer("can_neck", polys["neck"], col.can_neck),
+                  _poly_layer("can_tab", polys["tab"], col.can_tab)]
+        word_l, _ = text_layer("cans_word", word, cx, g.word_cy * ch, col.text)
+        children = [head_l, *shapes, num_l, word_l]
+    group = {"id": "callout_cans", "type": "group", "children": children}
     return group, (min(head_box[0], cx - can_w / 2), head_box[1], max(head_box[2], cx + can_w / 2), bottom)
 
 
@@ -274,7 +288,8 @@ def _static(ctx: Context):
 def build_layout(ctx: Context, p: Params) -> Layout:
     cfg, st = ctx.cfg, ctx.cfg.style
     cw, ch = st.canvas.w, st.canvas.h
-    dims = build_dims(ctx.fit, cfg.profile, cfg.spec.dims_in, st, p.offset_ratio, p.height_side, p.extension_lines)
+    dims = build_dims(ctx.fit, cfg.profile, cfg.spec.dims_in, st, p.offset_ratio, p.height_side, p.extension_lines,
+                      ctx.sil)
     labels = {d.axis: ctx.text(fmt(d.value, st), "label") for d in dims}
     hull_pts = np.array(ctx.sil.hull.exterior.coords)
 
@@ -316,6 +331,10 @@ def build_layout(ctx: Context, p: Params) -> Layout:
         a, b = C(d.p0), C(d.p1)
         tb = labels[d.axis]
         anchor = a + p.label_t[d.axis] * (b - a)
+        if abs(b[0] - a[0]) < 1e-6 and st.annotations.hang_inch_mark:
+            # plumb line: center the numerals, let the trailing inch mark hang (template does this)
+            digits = ctx.text(tb.text.rstrip("\u201d\u2033\"'"), "label")
+            anchor = anchor + np.array([(tb.w - digits.w) / 2, 0.0])
         box = (anchor[0] - tb.w / 2, anchor[1] - tb.h / 2, anchor[0] + tb.w / 2, anchor[1] + tb.h / 2)
         segs = split_line(a, b, box, gap_base * tb.cap)
         ext = [(C(e0), C(e1)) for e0, e1 in d.extension]
@@ -355,6 +374,8 @@ def _scene(ctx: Context, p: Params, s, T, placed: list[PlacedDim], title_l, call
     }]
     for d in placed:
         lab, _ = text_layer(f"dim_{d.dim.axis}_label", d.label, d.anchor[0], d.anchor[1], st.tokens.colors.text)
+        if abs(d.p1[0] - d.p0[0]) < 1e-6 and st.annotations.hang_inch_mark:
+            lab["hang_x"] = round(float(d.p0[0]), 2)  # Photoshop centers the numerals on this x
         layers.append({
             "id": f"dim_{d.dim.axis}", "type": "dimension", "axis": d.dim.axis, "value": d.dim.value,
             "line": [_r(d.p0), _r(d.p1)],
